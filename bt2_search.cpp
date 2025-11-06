@@ -2269,6 +2269,7 @@ public:
 
 	void print() {
 		for (int i=0; i<32; i++) {
+		  if (strcmp(msgs[i],"N/A")==0) break; // no more useful timers beyond this point
 		  fprintf(stderr, "Timer: %i %32.8f %s\n",i,dt[i],msgs[i]);
 		} 
 	}
