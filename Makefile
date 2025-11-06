@@ -17,6 +17,7 @@
 # along with Bowtie 2.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+
 #
 # Makefile for bowtie, bowtie2-build, bowtie2-inspect
 #
@@ -30,16 +31,32 @@ HEADERS := $(wildcard *.h)
 BOWTIE_MM := 1
 BOWTIE_SHARED_MEM :=
 
-# Note:
-# NVIDIA HPC SDK needs -DASM_PREFETCH in CPU mode to emit prefetch instruction
-# 
+#
+# Recommended g++ flags
+# CPU-only
+CXX := g++
+CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP
 
-#CXXFLAGS += -std=c++17 
+#
+# Recommended amdclang++ flags
+#CXX := amdclang++
+
+# CPU-only
+#CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP
+#
+# GPU-enabled
+#CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP -DOMPGPU -fopenmp-offload-mandatory --offload-arch=native -fopenmp-force-usm
+
+#
+# NVIDIA HPC SDK flags options
+# Note: It needs -DASM_PREFETCH in CPU mode to emit prefetch instruction 
 #CXXFLAGS += -std=c++17 -stdpar=multicore -DASM_PREFETCH
-CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP -DASM_PREFETCH
+#CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP -DASM_PREFETCH
 #CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP -DSSE_SW8
 #CXXFLAGS += -std=c++17 -acc -gpu=cc86,unified -stdpar=gpu -Minfo=accel -DUSE_ACC_STDPAR
 #CXXFLAGS += -std=c++17 -acc -gpu=cc86,unified,managed -stdpar=gpu -Minfo=accel
+
+
 
 
 NGS_VER ?= 2.10.2
