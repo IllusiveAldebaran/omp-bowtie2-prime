@@ -1960,8 +1960,8 @@ public:
 	SwDriverBT2()
 	: SwDriver() {}
 
-	SwDriverBT2(SwDriverBT2&& other) = default;
-	SwDriverBT2& operator=(SwDriverBT2&& other) noexcept = default;
+	SwDriverBT2(SwDriverBT2&& other) = delete;
+	SwDriverBT2& operator=(SwDriverBT2&& other) noexcept = delete;
 
 	SwDriverBT2(const SwDriverBT2& other) = delete;
 	SwDriverBT2& operator=(const SwDriverBT2& other) = delete;
@@ -2172,10 +2172,10 @@ public:
 	, rnd()
 	{}
 
-	msWorkerObjs(msWorkerObjs&& o) = default;
+	msWorkerObjs(msWorkerObjs&& o) = delete;
 	msWorkerObjs(const msWorkerObjs& o) = delete;
 
-	msWorkerObjs &operator=(msWorkerObjs&& o) noexcept = default;
+	msWorkerObjs &operator=(msWorkerObjs&& o) noexcept = delete;
 	msWorkerObjs &operator=(const msWorkerObjs& o) noexcept = delete;
 
 	void set_alloc(BTAllocator *alloc, bool propagate_alloc=true)
