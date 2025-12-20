@@ -1466,6 +1466,9 @@ public:
 	// Update buffers, based on content of _srs
 	void reserveBuffers();
 
+	// Allocate buffers of fixed size
+	void reserveBuffersFixed(size_t bufVec_size);
+
 	/**
 	 * Iterate through the seeds that cover the read and initiate a
 	 * search for each seed.

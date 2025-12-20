@@ -108,6 +108,7 @@ public:
 			if (abs(_seed.n_steps)>127) {printf("Unexpected n_seed_steps %i\n",int(_seed.n_steps)); throw 1;}
 #endif
 			n_seed_steps = _seed.n_steps;
+			//if (n_seed_steps!=seq_len) fprintf(stderr, "n_seed_steps!=seq_len %i,%i\n",int(n_seed_steps),int(seq_len));
 		}
 
 		CacheAndSeed(CacheAndSeed &other) = default;
@@ -557,6 +558,18 @@ MultiSeedAligner::~MultiSeedAligner() {
 	delete[] _als;
 }
 
+// just make sure the buffers are large enough
+void MultiSeedAligner::reserveBuffersFixed(size_t buf_total_size) {
+	if (_bufVec_size<buf_total_size) {
+		// need bigger buffers
+		if (_dataVec!=NULL) delete[] _dataVec;
+		if (_paramVec!=NULL) delete[] _paramVec;
+		_paramVec = new SeedAlignerSearchParams[buf_total_size];
+		_dataVec = new SeedAlignerSearchData[buf_total_size];
+		_bufVec_size = buf_total_size;
+	}
+}
+
 // Update buffer, based on content of _srs
 void MultiSeedAligner::reserveBuffers()
 {
@@ -571,14 +584,7 @@ void MultiSeedAligner::reserveBuffers()
 		buf_total_size+=_als[i].computeValidInstantiatedSeeds(_srs.getSR(i));
 	}
 
-	if (_bufVec_size<buf_total_size) {
-		// need bigger buffers
-		if (_dataVec!=NULL) delete[] _dataVec;
-		if (_paramVec!=NULL) delete[] _paramVec;
-		_paramVec = new SeedAlignerSearchParams[buf_total_size];
-		_dataVec = new SeedAlignerSearchData[buf_total_size];
-		_bufVec_size = buf_total_size;
-	}
+	reserveBuffersFixed(buf_total_size);
 
 	// now update buffers in SearchResults
 	buf_total_size = 0;
