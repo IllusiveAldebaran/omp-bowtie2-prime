@@ -2395,7 +2395,7 @@ static void multiseedSearchWorker() {
 		}
 
 		// Used by thread with threadid == 1 to measure time elapsed
-		time_t iTime = time(0);
+		// time_t iTime = time(0);
 
 		// Keep track of whether last search was exhaustive
 		bool *exhaustive = new(worker_alloc.allocate(num_parallel_tasks,sizeof(bool))) bool[num_parallel_tasks];
@@ -2692,7 +2692,6 @@ static void multiseedSearchWorker() {
 				const uint32_t mate = nb*reads_per_batch + ib;
 				if (mate_idx[mate]>=0 ) { // !done[mate]
 					msWorkerObjs& msobj = g_msobjs[mate];
-					const uint16_t interval = intervals[mate];
 					const SeedResults& sh = psrs->getSR(mate);
 					AlignmentCacheInterface ca = als.getCacheInterface(mate); // copy OK, just a few references
 
@@ -2966,7 +2965,7 @@ static void multiseedSearchWorkerPaired(const size_t num_parallel_tasks) {
 		PerReadMetrics prm;
 
 		// Used by thread with threadid == 1 to measure time elapsed
-		time_t iTime = time(0);
+		// time_t iTime = time(0);
 
 		// Keep track of whether last search was exhaustive for mates 1 and 2
 		bool exhaustive[2] = { false, false };

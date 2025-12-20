@@ -358,10 +358,10 @@ int SwDriver::extendSeeds(
 			// If the range is small, investigate all elements now.  If the
 			// range is large, just investigate one and move on - we might come
 			// back to this range later.
-			size_t riter = 0;
+			//size_t riter = 0;
 			while(!sdrnd.rands_[i].done() && (first || is_small )) {
 				assert(!gws_[i].done());
-				riter++;
+				//riter++;
 				if(minsc == perfectScore) {
 					return EXTEND_PERFECT_SCORE;
 				}
@@ -525,7 +525,6 @@ int SwDriver::extendSeeds(
 						prm.nDpFail = 0;
 					}
 				}
-				bool firstInner = true;
 				while(true) {
 					assert(found);
 					SwResult *res = NULL;
@@ -543,7 +542,6 @@ int SwDriver::extendSeeds(
 						res = &resGap_;
 					}
 					assert(res != NULL);
-					firstInner = false;
 					Interval refival(tidx, 0, fw, tlen);
 					assert_gt(res->alres.refExtent(), 0);
 					if(reportOverhangs &&
@@ -831,7 +829,7 @@ int SwDriver::extendSeedsPaired(
 	size_t nelt = 0, neltLeft = 0;
 	const size_t rows = rdlen;
 	const size_t orows  = ordlen;
-	size_t eltsDone = 0;
+	//size_t eltsDone = 0;
 	while(true) {
 		if(eeMode) {
 			if(firstEe) {
@@ -950,7 +948,7 @@ int SwDriver::extendSeedsPaired(
 					satpos_[i].sat.offs,
 					satpos_[i].sat.fmap);
 				gws_[i].advanceElement((TIndexOffU)elt, ebwtFw, ref, sa, gwstate_, wr, prm);
-				eltsDone++;
+				//eltsDone++;
 				assert_gt(neltLeft, 0);
 				neltLeft--;
 				assert_neq(OFF_MASK, wr.toff);
