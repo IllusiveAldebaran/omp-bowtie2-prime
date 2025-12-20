@@ -126,20 +126,10 @@ public:
 
 	// create an empty bwt
 	// and constratins from seed, for initial searchSeedBi invocation
-	SeedAlignerSearchParams(
-		const char *   _seq,             // sequence of the local seed alignment cache
-		const uint32_t _seq_len          // and its length
-	)
-	: cs(_seq,_seq_len)
-	{}
-
-	// create an empty bwt
-	// and constratins from seed, for initial searchSeedBi invocation
 	SeedAlignerSearchParams()
-	: cs()
 	{}
 
-	SeedAlignerSearchParams& operator=(const SeedAlignerSearchParams& other) = default;
+	SeedAlignerSearchParams& operator=(const SeedAlignerSearchParams& other) = delete;
 
 	void reset(
 		const SeedResults* sr,
