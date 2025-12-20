@@ -269,7 +269,6 @@ bool SwAligner::nextAlignment(
 	const size_t candsz = btncand_.size();
 	size_t SQ = dpRows() >> 4;
 	if(SQ == 0) SQ = 1;
-	size_t rdlen = rdlen_;
 	// assert(!checkpointed)
 	while(cural_ < candsz) {
 		// Doing 'continue' anywhere in here simply causes us to move on to the

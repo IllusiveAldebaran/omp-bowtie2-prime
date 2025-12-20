@@ -35,14 +35,14 @@ BOWTIE_SHARED_MEM :=
 # Recommended g++ flags
 # CPU-only
 CXX := g++
-CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP
+CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP -g
 
 #
 # Recommended amdclang++ flags
 #CXX := amdclang++
 
 # CPU-only
-#CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP
+#CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP -g
 #
 # GPU-enabled
 #CXXFLAGS += -std=c++17 -DFORCE_ALL_OMP -DOMPGPU -fopenmp-offload-mandatory --offload-arch=native -fopenmp-force-usm

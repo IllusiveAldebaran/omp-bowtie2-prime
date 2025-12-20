@@ -1333,6 +1333,7 @@ public:
 };
 
 class SeedAlignerSearchState;
+class CacheAndSeed;
 class SeedAlignerSearchParams;
 class SeedAlignerSearchData;
 
@@ -1356,8 +1357,10 @@ public:
 
 	// Set buffers needed by searchAllSeeds
 	void setBufs(
+		CacheAndSeed*            seedVec,
 		SeedAlignerSearchParams* paramVec,
 		SeedAlignerSearchData*   dataVec) {
+		seedVec_ = seedVec;
 		paramVec_ = paramVec;
 		dataVec_  = dataVec;
 	}
@@ -1416,7 +1419,7 @@ public:
 		        const Ebwt* ebwt,         // forward index (BWT)
         		uint64_t& bwops_,         // Burrows-Wheeler operations
 			const uint8_t nparams,    // must be leq SS_SIZE
-			const SeedAlignerSearchParams paramVec[],
+			const CacheAndSeed            seedVec[],
 			SeedAlignerSearchData         dataVec[]);
 
 protected:
@@ -1430,6 +1433,7 @@ protected:
  	**/
 	static constexpr uint8_t ibatch_size = 8;
 
+	CacheAndSeed*            seedVec_;       // not owned
 	SeedAlignerSearchParams* paramVec_;      // not owned
 	SeedAlignerSearchData*   dataVec_;       // not owned
 	uint32_t                 seedsearches_;   // valid elements in the above buffers
@@ -1465,6 +1469,9 @@ public:
 
 	// Update buffers, based on content of _srs
 	void reserveBuffers();
+
+	// Allocate buffers of fixed size
+	void reserveBuffersFixed(size_t bufVec_size);
 
 	/**
 	 * Iterate through the seeds that cover the read and initiate a
@@ -1506,12 +1513,11 @@ public:
 protected:
 
 	static uint16_t extend(
-		const SeedResults& sh, // seed hits to extend into full alignments
 		const Ebwt& ebwtFw,    // Forward Bowtie index
 		TIndexOffU topf,       // top in fw index
 		TIndexOffU botf,       // bot in fw index
-		bool fw,              // seed orientation
-		size_t off,           // seed offset from 5' end
+		const char* seq,       // pointer to the end of the sequence
+		uint8_t     lim,       // how many chars do I have
 		size_t& nlex);         // # positions we can extend to left w/o edit
 
 private:
@@ -1522,6 +1528,7 @@ private:
 
 	const int                _ftabLen;
 
+	CacheAndSeed*            _seedVec;       // array of _bufVec_size
 	SeedAlignerSearchParams* _paramVec;      // array of _bufVec_size
 	SeedAlignerSearchData*   _dataVec;       // array of _bufVec_size
 

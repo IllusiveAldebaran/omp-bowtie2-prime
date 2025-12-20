@@ -359,7 +359,7 @@ public:
 
 	// Allow move operator
 	SwDriver(SwDriver&& other) = default;
-	SwDriver& operator=(SwDriver&& other) noexcept = default;
+	SwDriver& operator=(SwDriver&& other) noexcept = delete;
 
 	// but not copy
 	SwDriver(const SwDriver& other) = delete;

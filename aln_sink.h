@@ -1027,7 +1027,7 @@ public:
 
 	// allow move operators
 	AlnSinkWrap(AlnSinkWrap&& o) = default;
-	AlnSinkWrap& operator=(AlnSinkWrap&& o) noexcept = default;
+	AlnSinkWrap& operator=(AlnSinkWrap&& o) noexcept = delete;
 
 	// but not copy operators
 	AlnSinkWrap(const AlnSinkWrap& o) = delete;
