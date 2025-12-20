@@ -1509,12 +1509,11 @@ public:
 protected:
 
 	static uint16_t extend(
-		const SeedResults& sh, // seed hits to extend into full alignments
 		const Ebwt& ebwtFw,    // Forward Bowtie index
 		TIndexOffU topf,       // top in fw index
 		TIndexOffU botf,       // bot in fw index
-		bool fw,              // seed orientation
-		size_t off,           // seed offset from 5' end
+		const char* seq,       // pointer to the end of the sequence
+		uint8_t     lim,       // how many chars do I have
 		size_t& nlex);         // # positions we can extend to left w/o edit
 
 private:

@@ -149,26 +149,22 @@ public:
 	SeedAlignerSearchParams& operator=(const SeedAlignerSearchParams& other) = default;
 
 	void reset(
-		const SeedResults* _sr,
-		const bool     _fw,
-		const uint8_t  _seedoffidx
+		const SeedResults* sr,
+		const bool     fw,
+		const uint8_t  seedoffidx
 	)
 	{
-	  sr = _sr;
-	  fw = _fw;
-	  seedoffidx = _seedoffidx;
-
-	  const InstantiatedSeed& _seed = _sr->instantiatedSeed(_fw, _seedoffidx);
-	  const char *   _seq = _sr->seqs(_fw,_seedoffidx);
-	  const uint8_t  _seq_len = _sr->seqs_len();
+	  const InstantiatedSeed& _seed = sr->instantiatedSeed(fw, seedoffidx);
+	  const char *   _seq = sr->seqs(fw,seedoffidx);
+	  const uint8_t  _seq_len = sr->seqs_len();
 	  cs.reset(_seq,_seq_len,_seed);
+	  sr->get_rel_offs(fw,sr->idx2off(seedoffidx), seq_end, seq_lim);
 	}
 
-	const SeedResults* sr;
 	// A sub-class for historical reasons
 	CacheAndSeed cs;      // local seed alignment cache and associated instatiated seed
-	bool         fw;
-	uint8_t      seedoffidx;
+	const char* seq_end;      // pointer to the end of the sequence
+	uint8_t     seq_lim;      // how many chars do I have
 };
 
 class SeedAlignerSearchData {
@@ -607,20 +603,16 @@ void MultiSeedAligner::reserveBuffers()
  * Return FM Index ops used to align seeds
  */
 uint16_t MultiSeedAligner::extend(
-	const SeedResults& sh, // seed hits to extend into full alignments
 	const Ebwt& ebwtFw,    // Forward Bowtie index
 	TIndexOffU topf,       // top in fw index
 	TIndexOffU botf,       // bot in fw index
-	bool fw,              // seed orientation
-	size_t off,           // seed offset from 5' end
+	const char* seq,       // pointer to the end of the sequence
+	uint8_t     lim,       // how many chars do I have
 	size_t& nlex)         // # positions we can extend to left w/o edit
 {
 	uint16_t nSdFmops = 0;
 	TIndexOffU t[4], b[4];
 	SideLocus tloc, bloc;
-	uint8_t lim = 0;
-	const char *seq = NULL;
-	sh.get_rel_offs(fw,off, seq, lim);
 	// We're about to add onto the beginning, so reverse it
 	if(lim > 0) {
 		const Ebwt *ebwt = &ebwtFw;
@@ -709,16 +701,14 @@ void MultiSeedAligner::searchAllSeedsDoAll(bool doExtend)
 		// TODO: integrate into searchSeedBi
 		for (size_t i=start_el; i<end_el; i++) {
 			if(dataVec[i].need_reporting && doExtend) {
-				uint32_t rdoff = paramVec[i].sr->idx2off(paramVec[i].seedoffidx);
 				size_t nlex = 0;
 				// prm.nSdFmops += 
 				extend(
-					*paramVec[i].sr,
 					*ebwtFw,
 					dataVec[i].bwt.topf,
 					dataVec[i].bwt.botf,
-					paramVec[i].fw,
-					rdoff,
+					paramVec[i].seq_end,
+					paramVec[i].seq_lim,
 					nlex);
 				dataVec[i].nlex = nlex;
 			}
