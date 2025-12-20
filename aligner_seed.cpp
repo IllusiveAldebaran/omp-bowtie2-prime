@@ -766,30 +766,30 @@ inline bool startSearchSeedBi(
 	const TIndexOffU *ftab,
 	const TIndexOffU *eftab,
 	const TIndexOffU fchr[5],     // index fchr
-	const SeedAlignerSearchParams &p,
+	const SeedAlignerSearchParams::CacheAndSeed &pcs,
 	SeedAlignerSearchState &sstate,
 	BwtTopBotFw &bwt)
 {
 
 	assert_eq(sstate.step, 0);
-	assert_gt(p.cs.n_seed_steps, 0);
+	assert_gt(pcs.n_seed_steps, 0);
 	{
-		const char *seq = p.cs.seq;
+		const char *seq = pcs.seq;
 		// Just starting
 		assert(!sstate.tloc.valid());
 		assert(!sstate.bloc.valid());
-		const int seed_step_min = p.cs.seed_step_min();
+		const int seed_step_min = pcs.seed_step_min();
 		int off = abs(seed_step_min)-1;
 		// Check whether/how far we can jump using ftab or fchr
 		int ftabLen = ep.ftabChars();
-		if (ftabLen > 1 && ftabLen <= p.cs.maxjump()) {
+		if (ftabLen > 1 && ftabLen <= pcs.maxjump()) {
 			TIndexOffU fwi0 = Ebwt::ftabSeqToInt(ftabLen, true, seq, off - ftabLen + 1, false);
 			Ebwt::ftabLoHi(ftab, eftab, ep,
 					fwi0,
 					bwt.topf, bwt.botf);
 			if(bwt.botf - bwt.topf == 0) return true;
 			sstate.step += ftabLen;
-		} else if(p.cs.maxjump() > 0) {
+		} else if(pcs.maxjump() > 0) {
 			// Use fchr
 			const int c = seq[off];
 			assert_range(0, 3, c);
@@ -798,11 +798,11 @@ inline bool startSearchSeedBi(
 			if(bwt.botf - bwt.topf == 0) return true;
 			sstate.step++;
 		} else {
-			assert_eq(0, p.cs.maxjump());
+			assert_eq(0, pcs.maxjump());
 			bwt.topf = 0;
 			bwt.botf = fchr[4];
 		}
-		if(sstate.step == p.cs.n_seed_steps) {
+		if(sstate.step == pcs.n_seed_steps) {
 			return true;
 		}
 		nextLocsBi(ep, ebwt, bwt, sstate.tloc, sstate.bloc);
@@ -849,18 +849,18 @@ SeedAligner::searchSeedBi(
 	   uint8_t n=0;
            uint8_t iparam = 0; // iparam and n may diverge, if some are done at init stage
 	   while (n<nleft) {
-		const SeedAlignerSearchParams& p = paramVec[iparam];
+		const SeedAlignerSearchParams::CacheAndSeed& pcs = paramVec[iparam].cs;
 		SeedAlignerSearchData&   sdata   = dataVec[iparam];
 		SeedAlignerSearchState&  sstate  = sstateVec[iparam];
-		sdata.resetData(p.cs.seq, p.cs.seq_len);
+		sdata.resetData(pcs.seq, pcs.seq_len);
 		sstate.reset();
 		idxs[n] = iparam;
 		iparam+=1;
 		const bool done = startSearchSeedBi(
 					ep, ebwtPtr, ftab, eftab, fchr,
-					p, sstate, sdata.bwt);
+					pcs, sstate, sdata.bwt);
 		if(done) {
-		        if(sstate.step == (int)p.cs.n_seed_steps) {
+		        if(sstate.step == (int)pcs.n_seed_steps) {
                 		// Finished aligning seed
 				sdata.set_reporting();
 			}
@@ -884,11 +884,11 @@ SeedAligner::searchSeedBi(
 	   while (n<nleft) {
 		const uint8_t iparam = idxs[n];
 
-		const SeedAlignerSearchParams& p = paramVec[iparam];
+		const SeedAlignerSearchParams::CacheAndSeed& pcs = paramVec[iparam].cs;
 		SeedAlignerSearchData&   sdata   = dataVec[iparam];
 		SeedAlignerSearchState&  sstate  = sstateVec[iparam];
 
-		const int n_seed_steps = p.cs.n_seed_steps;
+		const int n_seed_steps = pcs.n_seed_steps;
 		if (sstate.step >= (int) n_seed_steps) {
 			// done with this, swap with last and reduce nleft
 			nleft-=1;
@@ -901,8 +901,8 @@ SeedAligner::searchSeedBi(
 		assert(sdata.bwt.botf - sdata.bwt.topf > 1  || !sstate.bloc.valid());
 		assert(sstate.tloc.valid());
 
-		const int seed_step_min = p.cs.seed_step_min();
-		const char *seq = p.cs.seq;
+		const int seed_step_min = pcs.seed_step_min();
+		const char *seq = pcs.seq;
 
 		SeedAlignerSearchWorkState wstate(seed_step_min+sstate.step);
 		sstate.step++; // get ready for the next iteration
