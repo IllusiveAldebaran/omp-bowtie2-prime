@@ -1419,7 +1419,6 @@ public:
 		        const Ebwt* ebwt,         // forward index (BWT)
         		uint64_t& bwops_,         // Burrows-Wheeler operations
 			const uint8_t nparams,    // must be leq SS_SIZE
-			const CacheAndSeed            seedVec[],
 			SeedAlignerSearchData         dataVec[]);
 
 protected:

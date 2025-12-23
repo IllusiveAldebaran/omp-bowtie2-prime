@@ -245,7 +245,7 @@ struct QKey {
 #endif
 
 	uint64_t seq; // sequence
-	uint32_t len; // length of sequence
+	uint8_t len; // length of sequence
 };
 
 class AlignmentCache;
