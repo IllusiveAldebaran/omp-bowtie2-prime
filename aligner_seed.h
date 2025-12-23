@@ -1333,7 +1333,6 @@ public:
 };
 
 class SeedAlignerSearchState;
-class CacheAndSeed;
 class SeedAlignerSearchParams;
 class SeedAlignerSearchData;
 
@@ -1357,10 +1356,8 @@ public:
 
 	// Set buffers needed by searchAllSeeds
 	void setBufs(
-		CacheAndSeed*            seedVec,
 		SeedAlignerSearchParams* paramVec,
 		SeedAlignerSearchData*   dataVec) {
-		seedVec_ = seedVec;
 		paramVec_ = paramVec;
 		dataVec_  = dataVec;
 	}
@@ -1432,7 +1429,6 @@ protected:
  	**/
 	static constexpr uint8_t ibatch_size = 8;
 
-	CacheAndSeed*            seedVec_;       // not owned
 	SeedAlignerSearchParams* paramVec_;      // not owned
 	SeedAlignerSearchData*   dataVec_;       // not owned
 	uint32_t                 seedsearches_;   // valid elements in the above buffers
@@ -1527,7 +1523,6 @@ private:
 
 	const int                _ftabLen;
 
-	CacheAndSeed*            _seedVec;       // array of _bufVec_size
 	SeedAlignerSearchParams* _paramVec;      // array of _bufVec_size
 	SeedAlignerSearchData*   _dataVec;       // array of _bufVec_size
 
