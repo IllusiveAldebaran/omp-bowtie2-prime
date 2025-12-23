@@ -94,7 +94,6 @@ public:
 		const char *   _seq,            // sequence of the local seed alignment cache
 		const uint8_t _seq_len          // and its length
 	) {
-		seq = _seq;
 	  bwt.set(0,0);
 	  sak.init(_seq, _seq_len);
 	  nlex = 0;
@@ -109,11 +108,6 @@ public:
 	bool need_reporting;
 
 
-	// 
-	// sak stores values and not in the struct directly
-	// Thus sequence needs to be computed with bit operations
-	// 
-
 	// Since we only suport exact matches, use -n_steps
 	constexpr int seed_step_min() const {return -n_seed_steps();}
 
@@ -122,11 +116,12 @@ public:
 	// the ftab or not.
 	constexpr int maxjump() const {return n_seed_steps();}
 
-	// Use pointers, so they can be changed 
-	const char *seq; // not owned
-
 	constexpr int8_t n_seed_steps() const { return sak.len; }               // steps in the current instantiated seed
 
+	// 
+	// sak stores values and not in the struct directly
+	// Thus c needs to be computed with bit operations
+	// 
 	int8_t get_c(int off) const {
 		int c = (sak.seq >> (2 * (sak.len-1 - off))) & 0x03;
 		return c;
@@ -511,7 +506,7 @@ MultiSeedAligner::MultiSeedAligner(
 	, _als(new SeedAligner[srs.nSRs()])
 	, _caches(srs.nSRs())
 	, _ftabLen(ebwtFw->eh().ftabChars()) // cache the value
-	,_paramVec(NULL), _dataVec(NULL)
+	, _paramVec(NULL), _dataVec(NULL)
 	, _bufVec_size(0), _bufVec_filled(0)
 {}
 
@@ -731,7 +726,6 @@ inline bool startSearchSeedBi(
 	assert_eq(sstate.step, 0);
 	assert_gt(sdata.n_seed_steps(), 0);
 	{
-		const char *seq = sdata.seq;
 		// Just starting
 		assert(!sstate.tloc.valid());
 		assert(!sstate.bloc.valid());
@@ -740,7 +734,14 @@ inline bool startSearchSeedBi(
 		// Check whether/how far we can jump using ftab or fchr
 		int ftabLen = ep.ftabChars();
 		if (ftabLen > 1 && ftabLen <= sdata.maxjump()) {
-			TIndexOffU fwi0 = Ebwt::ftabSeqToInt(ftabLen, true, seq, off - ftabLen + 1, false);
+
+			// Section below is equivalent to Ebwt::ftabSeqToInt(ftabLen, true, seq, off - ftabLen + 1, false);
+			uint64_t low_bits = sdata.sak.seq >> (2 * (sdata.sak.len - 1 - off));
+			uint64_t mask = (0xffff'ffff'ffff'ffff >> (2 * (32 - ftabLen) )); 
+			// Pushes sequence to the right (off the edge), and masks for offset
+			TIndexOffU fwi0 = low_bits & mask;
+
+
 			Ebwt::ftabLoHi(ftab, eftab, ep,
 					fwi0,
 					bwt.topf, bwt.botf);
