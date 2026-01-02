@@ -736,7 +736,7 @@ inline bool startSearchSeedBi(
 		int ftabLen = ep.ftabChars();
 		if (ftabLen > 1 && ftabLen <= sdata.maxjump()) {
 
-			TIndexOffU fwi0 = Ebwt::ftabSakToInt(ftabLen, sdata.sak, off - ftabLen + 1);
+			TIndexOffU fwi0 = Ebwt::ftabSakToInt(ftabLen, sdata.sak.seq, sdata.sak.len, off - ftabLen + 1);
 
 			Ebwt::ftabLoHi(ftab, eftab, ep,
 					fwi0,
