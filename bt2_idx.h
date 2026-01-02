@@ -1417,6 +1417,27 @@ public:
 		}
 
 	/**
+	 * Takes a portion of encoded seed 'seq' starting at offset
+	 * Functionally similar to ftabSeqToInt without the encoding,
+	 * left to right, and not reversed
+	 */
+	static TIndexOffU ftabSakToInt(
+		const int fc,
+		const uint64_t seq,
+		const uint32_t len,
+		size_t off)
+		{
+			TIndexOffU ftabOff = 0;
+
+			uint64_t low_bits = seq >> (2 * (len - (off + fc) ));
+			uint64_t mask = (0xffff'ffff'ffff'ffff >> (2 * (32 - fc) )); 
+			// Pushes sequence to the right (off the edge), and masks for offset
+			ftabOff = low_bits & mask;
+
+			return ftabOff;
+		}
+
+	/**
 	 * Non-static facade for static function ftabHi.
 	 */
 	TIndexOffU ftabHi(TIndexOffU i) const {
