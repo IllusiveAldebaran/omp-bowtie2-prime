@@ -86,7 +86,7 @@ public:
 	, sak()
 	, nlex(0)
 	, need_reporting(false)
-	{} // may need to initialize sak with NULL and 0
+	{}
 
 	SeedAlignerSearchData& operator=(const SeedAlignerSearchData& other) = default;
 
@@ -122,8 +122,8 @@ public:
 	// sak stores values and not in the struct directly
 	// Thus c needs to be computed with bit operations
 	// 
-	int8_t get_c(int off) const {
-		int c = (sak.seq >> (2 * (sak.len-1 - off))) & 0x03;
+	uint8_t get_c(int off) const {
+		uint8_t c = (sak.seq >> (2 * (sak.len-1 - off))) & 0x03;
 		return c;
 	}
 };
@@ -718,11 +718,12 @@ inline bool startSearchSeedBi(
 	const TIndexOffU *ftab,
 	const TIndexOffU *eftab,
 	const TIndexOffU fchr[5],     // index fchr
-	const SeedAlignerSearchData &sdata,
+	SeedAlignerSearchData &sdata,
 	SeedAlignerSearchState &sstate)
 {
 
-	BwtTopBotFw bwt = sdata.bwt
+	BwtTopBotFw& bwt = sdata.bwt;
+
 	assert_eq(sstate.step, 0);
 	assert_gt(sdata.n_seed_steps(), 0);
 	{
@@ -735,12 +736,7 @@ inline bool startSearchSeedBi(
 		int ftabLen = ep.ftabChars();
 		if (ftabLen > 1 && ftabLen <= sdata.maxjump()) {
 
-			// Section below is equivalent to Ebwt::ftabSeqToInt(ftabLen, true, seq, off - ftabLen + 1, false);
-			uint64_t low_bits = sdata.sak.seq >> (2 * (sdata.sak.len - 1 - off));
-			uint64_t mask = (0xffff'ffff'ffff'ffff >> (2 * (32 - ftabLen) )); 
-			// Pushes sequence to the right (off the edge), and masks for offset
-			TIndexOffU fwi0 = low_bits & mask;
-
+			TIndexOffU fwi0 = Ebwt::ftabSakToInt(ftabLen, sdata.sak, off - ftabLen + 1);
 
 			Ebwt::ftabLoHi(ftab, eftab, ep,
 					fwi0,
@@ -749,7 +745,7 @@ inline bool startSearchSeedBi(
 			sstate.step += ftabLen;
 		} else if(sdata.maxjump() > 0) {
 			// Use fchr
-			const int c = sdata.get_c(off);
+			const uint8_t c = sdata.get_c(off);
 			assert_range(0, 3, c);
 			bwt.topf = fchr[c];
 			bwt.botf = fchr[c+1];
@@ -868,7 +864,7 @@ SeedAligner::searchSeedBi(
 			ebwt->mapBiLFEx(sstate.tloc, sstate.bloc, wstate.t, wstate.b);
 		}
 
-		int c = sdata.get_c(wstate.off); assert_range(0, 4, c_t);
+		uint8_t c = sdata.get_c(wstate.off); assert_range(0, 4, c_t);
 
 		if(!sstate.bloc.valid()) {
 			assert(wstate.bp[c] == wstate.tp[c]+1);

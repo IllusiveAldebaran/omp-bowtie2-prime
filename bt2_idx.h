@@ -53,6 +53,7 @@
 #include "ds.h"
 #include "random_source.h"
 #include "mem_ids.h"
+#include "aligner_cache.h"
 #include "btypes.h"
 #include "threadpool.h"
 
@@ -1414,6 +1415,29 @@ public:
 		{
 			int fc = _eh._ftabChars;
 			return ftabSeqToInt(fc, fw(), seq, off, rev);
+		}
+
+	/**
+	 * Takes a portion of encoded seed 'seq' starting at offset
+	 * Extracts info from sak.
+	 * Functionally similar to ftabSeqToInt without the encoding,
+	 * left to right, and not reversed
+	 */
+	static TIndexOffU ftabSakToInt(
+		const int fc,
+		const SAKey sak,
+		size_t off)
+		{
+			const uint64_t& seq = sak.seq;
+			const uint32_t& len = sak.len;
+			TIndexOffU ftabOff = 0;
+
+			uint64_t low_bits = seq >> (2 * (len - (off + fc) ));
+			uint64_t mask = (0xffff'ffff'ffff'ffff >> (2 * (32 - fc) )); 
+			// Pushes sequence to the right (off the edge), and masks for offset
+			ftabOff = low_bits & mask;
+
+			return ftabOff;
 		}
 
 	/**
