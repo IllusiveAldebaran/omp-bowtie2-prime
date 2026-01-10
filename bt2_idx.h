@@ -480,17 +480,15 @@ struct SideLocus {
 	int32_t _by;            // byte within side (not adjusted for bw sides)
 	int32_t _bp;            // bitpair within byte (not adjusted for bw sides)
 };
-struct USE_POPCNT_INSTRUCTION {
-	inline static int pop64(uint64_t x) {
-		return __builtin_popcountll(x);
-	}
-};
+
+inline static int pop64(uint64_t x) {
+	return __builtin_popcountll(x);
+}
 
 /**
  * Tricky-bit-bashing bitpair counting for given two-bit value (0-3)
  * within a 64-bit argument.
  */
-template<typename Operation>
 inline static int countInU64(int c, uint64_t dw) {
 	constexpr uint64_t c_table[4] = {
 	0xffffffffffffffff,
@@ -504,7 +502,7 @@ inline static int countInU64(int c, uint64_t dw) {
 	uint64_t x1 = (x0 >> 1);
 	uint64_t x2 = x1 & (0x5555555555555555);
 	uint64_t x3 = x0 & x2;
-	uint64_t tmp = Operation().pop64(x3);
+	uint64_t tmp = pop64(x3);
 	return (int) tmp;
 }
 
@@ -1973,7 +1971,7 @@ public:
 		int i = 0;
 		// Assume popcnt processor support
 		for(; i + 7 < l._by; i += 8) {
-			cCnt += countInU64<USE_POPCNT_INSTRUCTION>(c, *(uint64_t*)&side[i]);
+			cCnt += countInU64(c, *(uint64_t*)&side[i]);
 		}
 		// Count occurences of c in the rest of the side (using LUT)
 		for(; i < l._by; i++) {
@@ -1992,7 +1990,6 @@ public:
 	 *
 	 * Function gets 2.32% in profile
 	 */
-	template<typename Operation>
 	inline static void countInU64Ex(uint64_t dw, TIndexOffU* arrs) {
 		constexpr uint64_t c_table[4] = {
 			0xffffffffffffffff,
@@ -2005,7 +2002,7 @@ public:
 		uint64_t x1 = (x0 >> 1);
 		uint64_t x2 = x1 & (0x5555555555555555llu);
 		uint64_t x3 = x0 & x2;
-		uint64_t tmp = Operation().pop64(x3);
+		uint64_t tmp = pop64(x3);
 		arrs[0] += (uint32_t) tmp;
 
 		c0 = c_table[1];
@@ -2013,7 +2010,7 @@ public:
 		x1 = (x0 >> 1);
 		x2 = x1 & (0x5555555555555555llu);
 		x3 = x0 & x2;
-		tmp = Operation().pop64(x3);
+		tmp = pop64(x3);
 		arrs[1] += (uint32_t) tmp;
 
 		c0 = c_table[2];
@@ -2021,7 +2018,7 @@ public:
 		x1 = (x0 >> 1);
 		x2 = x1 & (0x5555555555555555llu);
 		x3 = x0 & x2;
-		tmp = Operation().pop64(x3);
+		tmp = pop64(x3);
 		arrs[2] += (uint32_t) tmp;
 
 		c0 = c_table[3];
@@ -2029,7 +2026,7 @@ public:
 		x1 = (x0 >> 1);
 		x2 = x1 & (0x5555555555555555llu);
 		x3 = x0 & x2;
-		tmp = Operation().pop64(x3);
+		tmp = pop64(x3);
 		arrs[3] += (uint32_t) tmp;
 	}
 
@@ -2058,7 +2055,7 @@ public:
 
 		// Assume popcnt intrinsic capability
 		for(; i+7 < l._by; i += 8) {
-			countInU64Ex<USE_POPCNT_INSTRUCTION>(*(uint64_t*)&side[i], arrs);
+			countInU64Ex(*(uint64_t*)&side[i], arrs);
 		}
 		// Count occurences of nucleotides in the rest of the side (using LUT)
 		// Many cache misses on following lines (~20K)
