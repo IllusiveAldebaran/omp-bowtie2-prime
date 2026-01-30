@@ -971,16 +971,15 @@ SeedAligner::searchSeedBi(
 			if (n<nleft) idxs[n] = idxs[nleft];
 			continue;
 		}
-		nextLocsBi(ep, ebwtPtr, sdata.bwt, sstate.tloc, sstate.bloc);
-		//nextLocsBi(ep,    ebwtPtr,     bwt, sstate.tloc, sstate.bloc);
+		//nextLocsBi(ep, ebwtPtr, sdata.bwt, sstate.tloc, sstate.bloc);
 		{ // nextLocsBi()
-			if(sdata.bwt.botf - bwt.topf == 1) {
+			if(sdata.bwt.botf - sdata.bwt.topf == 1) {
 				// Already down to 1 row; just init top locus
-				sstate.tloc.initFromRow(bwt.topf, ep, ebwtPtr);
+				sstate.tloc.initFromRow(sdata.bwt.topf, ep, ebwtPtr);
 				sstate.bloc.invalidate();
 			} else {
 				SideLocus::initFromTopBot(
-					bwt.topf, bwt.botf, ep, ebwtPtr, sstate.tloc, sstate.bloc);
+					sdata.bwt.topf, sdata.bwt.botf, ep, ebwtPtr, sstate.tloc, sstate.bloc);
 				assert(sstate.bloc.valid());
 			}
 		} // nextLocsBi()
