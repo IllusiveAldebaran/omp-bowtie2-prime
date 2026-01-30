@@ -823,6 +823,28 @@ void MultiSeedAligner::searchAllSeedsDoAll(bool doExtend)
 		if (end_el>total_els) end_el = total_els;
 		uint64_t bwops; // just ignore the bwops for now, keep it local
 		SeedAligner::searchSeedBi<ibatch_size>(ebwtFw, bwops, end_el-start_el, &(dataVec[start_el]));
+	} // for gbatch
+#ifndef FORCE_ALL_OMP
+	); // for_each
+#endif
+
+
+#ifdef FORCE_ALL_OMP
+#ifdef OMPGPU
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+	for (uint32_t gbatch=0; gbatch<total_batches; gbatch++) {
+#else
+	std::for_each_n(std::execution::par_unseq,
+		thrust::counting_iterator(0), total_batches,
+		[ebwtFw,paramVec,dataVec,total_els](uint32_t gbatch) mutable {
+#endif
+		const size_t start_el = gbatch*ibatch_size;
+		size_t end_el = start_el+ibatch_size;
+
+		if (end_el>total_els) end_el = total_els;
 		// TODO: integrate into searchSeedBi
 		for (size_t i=start_el; i<end_el; i++) {
 			if(dataVec[i].need_reporting && doExtend) {
@@ -994,7 +1016,7 @@ SeedAligner::searchSeedBi(
 				int ftabLen = ep.ftabChars();
 				if (ftabLen > 1 && ftabLen <= sdata.maxjump()) {
 
-					TIndexOffU fwi0;// = Ebwt::ftabSakToInt(ftabLen, sdata.sak.seq, sdata.sak.len, off - ftabLen + 1);
+					TIndexOffU fwi0; // = Ebwt::ftabSakToInt(ftabLen, sdata.sak.seq, sdata.sak.len, off - ftabLen + 1);
 					{
 						uint64_t low_bits = sdata.sak.seq >> (2 * (sdata.sak.len - ((off+1)) ));
 						uint64_t mask = (0xffff'ffff'ffff'ffff >> (2 * (32 - ftabLen) )); 
@@ -1005,6 +1027,37 @@ SeedAligner::searchSeedBi(
 					Ebwt::ftabLoHi(ftab, eftab, ep,
 							fwi0,
 							bwt.topf, bwt.botf);
+					{ // Ebwt::ftabLoHi(ftab, eftab, ep, fwi0, bwt.topf, bwt.botf);
+						{ // bwt.topf = Ebwt::ftabHi(ftab,eftab, ep._len, ep._ftabLen, ep._eftabLen, fwi0);
+							assert_lt(fwi0, ep._ftabLen);
+							if(ftab[fwi0] <= ep._len) {
+								bwt.topf = ftab[fwi0];
+							} else {
+								TIndexOffU efIdx = ftab[fwi0] ^ OFF_MASK;
+								assert_lt(efIdx*2+1, ep._eftabLen);
+								bwt.topf = eftab[efIdx*2+1];
+							}
+						}
+
+
+						{ // bwt.botf = Ebwt::ftabLo(ftab,eftab, ep._len, ep._ftabLen, ep._eftabLen, fwi0+1);
+							assert_lt(fwi0+1, ep._ftabLen);
+							if(ftab[fwi0+1] <= ep._len) {
+								bwt.botf = ftab[fwi0+1];
+							} else {
+								TIndexOffU efIdx = ftab[fwi0+1] ^ OFF_MASK;
+								assert_lt(efIdx*2+1, ep._eftabLen);
+								bwt.botf = eftab[efIdx*2];
+							}
+						}
+
+
+
+						assert_geq(bwt.botf, bwt.topf);
+					} // Ebwt::ftabLoHi(ftab, eftab, ep, fwi0, bwt.topf, bwt.botf);
+
+
+
 					if(bwt.botf - bwt.topf == 0) done = true;
 					else sstate.step += ftabLen;
 				} else if(sdata.maxjump() > 0) {
@@ -1033,8 +1086,29 @@ SeedAligner::searchSeedBi(
 						sstate.tloc.initFromRow(bwt.topf, ep, ebwtPtr);
 						sstate.bloc.invalidate();
 					} else {
-						SideLocus::initFromTopBot(
-							bwt.topf, bwt.botf, ep, ebwtPtr, sstate.tloc, sstate.bloc);
+						{ // SideLocus::initFromTopBot( bwt.topf, bwt.botf, ep, ebwtPtr, sstate.tloc, sstate.bloc);
+							const TIndexOffU sideBwtLen = ep._sideBwtLen;
+							assert_gt(bwt.botf, bwt.topf);
+							sstate.tloc.initFromRow(bwt.topf, ep, ebwtPtr, true);// prefetch = true
+							TIndexOffU spread = bwt.botf - bwt.topf;
+							// Many cache misses on the following lines
+							const TIndexOffU charOffSum = sstate.tloc._charOff + spread;
+							if(charOffSum < sideBwtLen) {
+								const uint32_t bcharOff = (uint32_t) charOffSum;
+								sstate.bloc._charOff = bcharOff;
+								sstate.bloc._sideNum = sstate.tloc._sideNum;
+								sstate.bloc._sideByteOff = sstate.tloc._sideByteOff;
+								sstate.bloc._by = bcharOff >> 2;
+								assert_lt(sstate.bloc._by, (int)ep._sideBwtSz);
+								sstate.bloc._bp = bcharOff & 3;
+								// no need for any prefetch, same _sideByteOff
+							} else {
+								sstate.bloc.initFromRow(bwt.botf, ep, ebwtPtr, true); // prefetch = true
+							}
+						} // SideLocus::initFromTopBot( bwt.topf, bwt.botf, ep, ebwtPtr, sstate.tloc, sstate.bloc);
+
+
+
 						assert(sstate.bloc.valid());
 					}
 				} // nextLocsBi()
@@ -1098,7 +1172,169 @@ SeedAligner::searchSeedBi(
 			// Range delimited by tloc/bloc has size >1.  If size == 1,
 			// we use a simpler query (see if(!bloc.valid()) blocks below)
 			bwops++;
-			ebwt->mapBiLFEx(sstate.tloc, sstate.bloc, wstate.t, wstate.b);
+			{ //ebwt->mapBiLFEx(sstate.tloc, sstate.bloc, wstate.t, wstate.b);
+#ifndef NDEBUG
+				for(int i = 0; i < 4; i++) {
+					assert_eq(0, tops[0]);  assert_eq(0, bots[0]);
+				}
+#endif
+
+				{ // ebwt->countBt2SideEx(sstate.tloc, wstate.t);
+					assert_range(0, (int)ebwt->_eh._sideBwtSz-1, (int)sstate.tloc._by);
+					assert_range(0, 3, (int)sstate.tloc._bp);
+					
+					{ // ebwt->countUpToEx(sstate.tloc, wstate.t);
+						int i = 0;
+						// Count occurrences of each nucleotide in each 64-bit word using
+						// bit trickery; note: this seems does not seem to lend a
+						// significant boost to performance in practice.  If you comment
+						// out this whole loop (which won't affect correctness - it will
+						// just cause the following loop to take up the slack) then runtime
+						// does not change noticeably. Someday the countInU64() and pop()
+						// functions should be vectorized/SSE-ized in case that helps.
+						const uint8_t *side = sstate.tloc.side(ebwt->ebwt());
+
+						// Assume popcnt intrinsic capability
+						for(; i+7 < sstate.tloc._by; i += 8) {
+							Ebwt::countInU64Ex(*(uint64_t*)&side[i], wstate.t);
+						}
+						// Count occurences of nucleotides in the rest of the side (using LUT)
+						// Many cache misses on following lines (~20K)
+						for(; i < sstate.tloc._by; i++) {
+							wstate.t[0] += ebwt->_cCntLUT_4[0][0][side[i]];
+							wstate.t[1] += ebwt->_cCntLUT_4[0][1][side[i]];
+							wstate.t[2] += ebwt->_cCntLUT_4[0][2][side[i]];
+							wstate.t[3] += ebwt->_cCntLUT_4[0][3][side[i]];
+						}
+						// Count occurences of c in the rest of the byte
+						if(sstate.tloc._bp > 0) {
+							wstate.t[0] += ebwt->_cCntLUT_4[(int)sstate.tloc._bp][0][side[i]];
+							wstate.t[1] += ebwt->_cCntLUT_4[(int)sstate.tloc._bp][1][side[i]];
+							wstate.t[2] += ebwt->_cCntLUT_4[(int)sstate.tloc._bp][2][side[i]];
+							wstate.t[3] += ebwt->_cCntLUT_4[(int)sstate.tloc._bp][3][side[i]];
+						}
+					} 
+					// ebwt->countUpToEx(tloc, t);
+
+
+					if(sstate.tloc._sideByteOff <= ebwt->_zEbwtByteOff && sstate.tloc._sideByteOff + sstate.tloc._by >= ebwt->_zEbwtByteOff) {
+						// Adjust for the fact that we represented $ with an 'A', but
+						// shouldn't count it as an 'A' here
+						if((sstate.tloc._sideByteOff + sstate.tloc._by > ebwt->_zEbwtByteOff) ||
+								(sstate.tloc._sideByteOff + sstate.tloc._by == ebwt->_zEbwtByteOff && sstate.tloc._bp > ebwt->_zEbwtBpOff))
+						{
+							wstate.t[0]--; // Adjust for '$' looking like an 'A'
+						}
+					}
+					WITHIN_FCHR(wstate.t);
+					WITHIN_BWT_LEN(wstate.t);
+					// Now factor in the occ[] count at the side break
+					const uint8_t *side = sstate.tloc.side(ebwt->ebwt());
+					const uint8_t *acgt16 = side + ebwt->_eh._sideSz - OFF_SIZE*4;
+					const TIndexOffU *acgt = reinterpret_cast<const TIndexOffU*>(acgt16);
+					assert_leq(acgt[0], ebwt->fchr()[1] + ebwt->_eh.sideBwtLen());
+					assert_leq(acgt[1], ebwt->fchr()[2]-ebwt->fchr()[1]);
+					assert_leq(acgt[2], ebwt->fchr()[3]-ebwt->fchr()[2]);
+					assert_leq(acgt[3], ebwt->fchr()[4]-ebwt->fchr()[3]);
+					assert_leq(acgt[0], ebwt->_eh._len + ebwt->_eh.sideBwtLen());
+					assert_leq(acgt[1], ebwt->_eh._len);
+					assert_leq(acgt[2], ebwt->_eh._len);
+					assert_leq(acgt[3], ebwt->_eh._len);
+					wstate.t[0] += (acgt[0] + ebwt->fchr()[0]);
+					wstate.t[1] += (acgt[1] + ebwt->fchr()[1]);
+					wstate.t[2] += (acgt[2] + ebwt->fchr()[2]);
+					wstate.t[3] += (acgt[3] + ebwt->fchr()[3]);
+					WITHIN_FCHR(wstate.t);
+				} // ebwt->countBt2SideEx(tloc, t)
+
+				{ // ebwt->countBt2SideEx(sstate.bloc, wstate.b);
+					assert_range(0, (int)ebwt->_eh._sideBwtSz-1, (int)sstate.bloc._by);
+					assert_range(0, 3, (int)sstate.bloc._bp);
+
+					{ // ebwt->countUpToEx(sstate.bloc, wstate.t);
+						int i = 0;
+						// Count occurrences of each nucleotide in each 64-bit word using
+						// bit trickery; note: this seems does not seem to lend a
+						// significant boost to performance in practice.  If you comment
+						// out this whole loop (which won't affect correctness - it will
+						// just cause the following loop to take up the slack) then runtime
+						// does not change noticeably. Someday the countInU64() and pop()
+						// functions should be vectorized/SSE-ized in case that helps.
+						const uint8_t *side = sstate.bloc.side(ebwt->ebwt());
+
+						// Assume popcnt intrinsic capability
+						for(; i+7 < sstate.bloc._by; i += 8) {
+							Ebwt::countInU64Ex(*(uint64_t*)&side[i], wstate.b);
+						}
+						// Count occurences of nucleotides in the rest of the side (using LUT)
+						// Many cache misses on following lines (~20K)
+						for(; i < sstate.bloc._by; i++) {
+							wstate.b[0] += ebwt->_cCntLUT_4[0][0][side[i]];
+							wstate.b[1] += ebwt->_cCntLUT_4[0][1][side[i]];
+							wstate.b[2] += ebwt->_cCntLUT_4[0][2][side[i]];
+							wstate.b[3] += ebwt->_cCntLUT_4[0][3][side[i]];
+						}
+						// Count occurences of c in the rest of the byte
+						if(sstate.bloc._bp > 0) {
+							wstate.b[0] += ebwt->_cCntLUT_4[(int)sstate.bloc._bp][0][side[i]];
+							wstate.b[1] += ebwt->_cCntLUT_4[(int)sstate.bloc._bp][1][side[i]];
+							wstate.b[2] += ebwt->_cCntLUT_4[(int)sstate.bloc._bp][2][side[i]];
+							wstate.b[3] += ebwt->_cCntLUT_4[(int)sstate.bloc._bp][3][side[i]];
+						}
+					}
+						// ebwt->countUpToEx(bloc, b);
+
+
+
+
+
+					if(sstate.bloc._sideByteOff <= ebwt->_zEbwtByteOff && sstate.bloc._sideByteOff + sstate.bloc._by >= ebwt->_zEbwtByteOff) {
+						// Adjust for the fact that we represented $ with an 'A', but
+						// shouldn't count it as an 'A' here
+						if((sstate.bloc._sideByteOff + sstate.bloc._by > ebwt->_zEbwtByteOff) ||
+								(sstate.bloc._sideByteOff + sstate.bloc._by == ebwt->_zEbwtByteOff && sstate.bloc._bp > ebwt->_zEbwtBpOff))
+						{
+							wstate.b[0]--; // Adjust for '$' looking like an 'A'
+						}
+					}
+					WITHIN_FCHR(wstate.b);
+					WITHIN_BWT_LEN(wstate.b);
+					// Now factor in the occ[] count at the side break
+					const uint8_t *side = sstate.bloc.side(ebwt->ebwt());
+					const uint8_t *acgt16 = side + ebwt->_eh._sideSz - OFF_SIZE*4;
+					const TIndexOffU *acgt = reinterpret_cast<const TIndexOffU*>(acgt16);
+					assert_leq(acgt[0], ebwt->fchr()[1] + ebwt->_eh.sideBwtLen());
+					assert_leq(acgt[1], ebwt->fchr()[2]-ebwt->fchr()[1]);
+					assert_leq(acgt[2], ebwt->fchr()[3]-ebwt->fchr()[2]);
+					assert_leq(acgt[3], ebwt->fchr()[4]-ebwt->fchr()[3]);
+					assert_leq(acgt[0], ebwt->_eh._len + ebwt->_eh.sideBwtLen());
+					assert_leq(acgt[1], ebwt->_eh._len);
+					assert_leq(acgt[2], ebwt->_eh._len);
+					assert_leq(acgt[3], ebwt->_eh._len);
+					wstate.b[0] += (acgt[0] + ebwt->fchr()[0]);
+					wstate.b[1] += (acgt[1] + ebwt->fchr()[1]);
+					wstate.b[2] += (acgt[2] + ebwt->fchr()[2]);
+					wstate.b[3] += (acgt[3] + ebwt->fchr()[3]);
+					WITHIN_FCHR(wstate.b);
+				} // ebwt->countBt2SideEx(bloc, b)
+
+
+#ifndef NDEBUG
+				if(_sanity && !overrideSanity) {
+					// Make sure results match up with individual calls to mapLF;
+					// be sure to override sanity-checking in the callee, or we'll
+					// have infinite recursion
+					assert_eq(mapLF(ltop, 0, true), tops[0]);
+					assert_eq(mapLF(ltop, 1, true), tops[1]);
+					assert_eq(mapLF(ltop, 2, true), tops[2]);
+					assert_eq(mapLF(ltop, 3, true), tops[3]);
+					assert_eq(mapLF(lbot, 0, true), bots[0]);
+					assert_eq(mapLF(lbot, 1, true), bots[1]);
+					assert_eq(mapLF(lbot, 2, true), bots[2]);
+					assert_eq(mapLF(lbot, 3, true), bots[3]);
+				}
+#endif
+			} //ebwt->mapBiLFEx(tloc, bloc, t, b);
 		}
 
 		uint8_t c = sdata.get_c(wstate.off); assert_range(0, 4, c_t);
@@ -1134,7 +1370,7 @@ SeedAligner::searchSeedBi(
 			if (n<nleft) idxs[n] = idxs[nleft];
 			continue;
 		}
-		//nextLocsBi(ep, ebwtPtr, sdata.bwt, sstate.tloc, sstate.bloc);
+		nextLocsBi(ep, ebwtPtr, sdata.bwt, sstate.tloc, sstate.bloc);
 		{ // nextLocsBi()
 			if(sdata.bwt.botf - sdata.bwt.topf == 1) {
 				// Already down to 1 row; just init top locus
