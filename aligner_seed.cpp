@@ -565,6 +565,7 @@ void MultiSeedAligner::reserveBuffers()
  *
  * Return FM Index ops used to align seeds
  */
+AMD_HOST_DEV
 uint16_t MultiSeedAligner::extend(
 	const Ebwt& ebwtFw,    // Forward Bowtie index
 	TIndexOffU topf,       // top in fw index
@@ -636,7 +637,7 @@ void MultiSeedAligner::searchAllSeedsDoAll(const size_t ncut, const bool doExten
 {
 	// doExtend               // do extension of seed hits?
 	const Ebwt* ebwtFw= _ebwtFw;
-	const SeedAlignerSearchParams* paramVec = _paramVec;
+	SeedAlignerSearchParams* paramVec = _paramVec;
 	SeedAlignerSearchData*         dataVec  = _dataVec;
 
 	// do the searches in batches
@@ -648,35 +649,9 @@ void MultiSeedAligner::searchAllSeedsDoAll(const size_t ncut, const bool doExten
 	//fprintf(stderr, "total_els: %i total_els: %i ibatch_size: %i\n", int(ibatch_size), int(total_els), int(ibatch_size));
 #ifdef HIP_KERNELS
 
-	searchSeedBi<ibatch_size><<<(total_els+ibatch_size*BLOCK_SIZE-1)/(ibatch_size*BLOCK_SIZE), BLOCK_SIZE>>>(ebwtFw, total_els, ncut, &(dataVec[0]));
+	searchSeedBi<ibatch_size><<<(total_els+ibatch_size*BLOCK_SIZE-1)/(ibatch_size*BLOCK_SIZE), BLOCK_SIZE>>>(ebwtFw, total_els, &(paramVec[0]), doExtend, ncut, &(dataVec[0]));
 	HIP_CHECK(hipGetLastError());
 	HIP_CHECK(hipDeviceSynchronize());
-
-	if(doExtend) {
-#ifdef FORCE_ALL_OMP
-#pragma omp parallel for
-#endif
-		for (uint32_t gbatch=0; gbatch<total_batches; gbatch++) {
-			const size_t start_el = gbatch*ibatch_size;
-			size_t end_el = start_el+ibatch_size;
-			if (end_el>total_els) end_el = total_els;
-			// TODO: integrate into searchSeedBi
-			for (size_t i=start_el; i<end_el; i++) {
-				if(dataVec[i].need_reporting) {
-					size_t nlex = 0;
-					// prm.nSdFmops += 
-					extend(
-						*ebwtFw,
-						dataVec[i].bwt.topf,
-						dataVec[i].bwt.botf,
-						paramVec[i].seq_end,
-						paramVec[i].seq_lim,
-						nlex);
-					dataVec[i].nlex = nlex;
-				}
-			}
-		} // for gbatch
-	}
 
 #else // not HIP kernel
 
@@ -819,6 +794,8 @@ void SeedAligner::searchSeedBi(
                         const Ebwt* ebwt,       // forward index (BWT)
 #ifdef HIP_KERNELS
 												uint64_t total_els, // total elements, must be known for GPU calculation
+												SeedAlignerSearchParams paramVec[],
+												bool doExtend,
 #else
                         const uint8_t nparams,
 #endif
@@ -832,7 +809,6 @@ void SeedAligner::searchSeedBi(
 		size_t end_el = start_el+SS_SIZE;
 		if (end_el>total_els) end_el = total_els;
 
-
 		uint8_t nparams = end_el-start_el;
 
 		// guard
@@ -840,6 +816,7 @@ void SeedAligner::searchSeedBi(
 
 		// move dataVec to our start idx
 		dataVec = &dataVec[start_el];
+		paramVec = &paramVec[start_el];
 #endif
 
 
@@ -957,6 +934,29 @@ uint8_t c = sdata.get_c(wstate.off); assert_range(0, 4, c_t);
 		n+=1;
 	   } // while n
 	} // while nleft
+
+#ifdef HIP_KERNELS
+
+	if(doExtend) {
+			// dataVec and paramVec have already been offset by start_el
+			// So we just need to look at nparams
+			for (size_t i=0; i<nparams; i++) {
+				if(dataVec[i].need_reporting) {
+					size_t nlex = 0;
+					// prm.nSdFmops += 
+					MultiSeedAligner::extend(
+						*ebwt,
+						dataVec[i].bwt.topf,
+						dataVec[i].bwt.botf,
+						paramVec[i].seq_end,
+						paramVec[i].seq_lim,
+						nlex);
+					dataVec[i].nlex = nlex;
+				}
+			}
+	}
+
+#endif // HIP_KERNELS
 
 	return;
 }

@@ -1463,6 +1463,8 @@ __global__
 void searchSeedBi(
 		        const Ebwt* ebwt,         // forward index (BWT)
 			uint64_t total_els, // total elements, must be known for GPU calculation
+			SeedAlignerSearchParams paramVec[],
+			bool doExtend,
 			const size_t ncut,        // max seed result size (larger is lower quality
 			SeedAlignerSearchData         dataVec[]);
 #endif
@@ -1537,8 +1539,9 @@ public:
 	void finalizeCaches() {
 		_caches.finalize();
 	}
-protected:
+//protected:
 
+	AMD_HOST_DEV
 	static uint16_t extend(
 		const Ebwt& ebwtFw,    // Forward Bowtie index
 		TIndexOffU topf,       // top in fw index

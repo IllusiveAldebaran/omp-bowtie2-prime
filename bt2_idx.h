@@ -2482,7 +2482,7 @@ public:
 	 * Given row and its locus information, set the row to LF(row) and
 	 * return the character that was in the final column.
 	 */
-	inline int mapLF1(
+	constexpr inline int mapLF1(
 		TIndexOffU& row,      // starting row
 		const SideLocus& l  // locus for starting row
 		ASSERT_ONLY(, bool overrideSanity = false)
