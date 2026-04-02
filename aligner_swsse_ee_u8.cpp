@@ -380,7 +380,7 @@ inline void EEU8_lazyF(const SSERegI vf0,
 
 // Helper for saturating subtraction (unsigned 8-bit)
 // No CDNA builtin.
-__device__ __forceinline__ uint8_t subs_u8(uint8_t a, uint8_t b) {
+__device__ __forceinline__ uint16_t subs_u16(uint16_t a, uint16_t b) {
     return a-min(a,b);
 }
 
@@ -406,10 +406,10 @@ uint8_t EEU8_alignOne_HIP(
     int lane_id_b = (threadIdx.x > 31) ? 1 : 0;
     unsigned long long bitmask = (lane_id_b == 0) ? 0x0000000FFFFFFFFULL : 0xFFFFFFFF00000000ULL;
 
-    uint8_t vf = 0;
+    uint16_t vf = 0;
 
     // load last H from previous column
-    uint8_t vh = pvHLoad[(colstride - ROWSTRIDE) * LANES + lane_id];
+    uint16_t vh = (uint16_t)(pvHLoad[(colstride - ROWSTRIDE) * LANES + lane_id]);
 
     vh = __shfl_up_sync(bitmask, vh, 1, LANES);
 
@@ -422,51 +422,51 @@ uint8_t EEU8_alignOne_HIP(
     for (uint16_t j = 0; j < iter; j++)
     {
         //uint8_t vs0 = pvScore[2*j*LANES+lane_id];
-        uint8_t vs0 = pvScore[lane_id];
+        uint16_t vs0 = (uint16_t)pvScore[lane_id];
 	pvScore+=LANES;
 
         //uint8_t vs1 = pvScore[(2*j+1)*LANES+lane_id];
-        uint8_t vs1 = pvScore[lane_id];
+        uint16_t vs1 = (uint16_t)pvScore[lane_id];
 	pvScore+=LANES;
 
 	// Store cells in F, calculated previously
-        uint8_t ve =
-            pvELoad[lane_id];
+        uint16_t ve =
+            (uint16_t)pvELoad[lane_id];
 	pvELoad += ROWSTRIDE*LANES;
-        vf = subs_u8(vf, vs1);
+        vf = subs_u16(vf, vs1);
 
-        pvFStore[lane_id] = vf;
+        pvFStore[lane_id] = (uint8_t)vf;
         pvFStore += ROWSTRIDE*LANES;
 
 	// Factor in query profile (matches and mismatches)
-        vh = subs_u8(vh, vs0);
+        vh = subs_u16(vh, vs0);
 
 	// Update H, factoring in E and F
         vh = max(vh, ve);
         vh = max(vh, vf);
 
 	// Save the new vH values
-        pvHStore[lane_id] = vh;
+        pvHStore[lane_id] = (uint16_t)vh;
 	pvHStore += ROWSTRIDE*LANES;
 
 
 	// Update vE value
-        uint8_t vtmp = vh;
-        vh = subs_u8(vh, rdgapo);
-        vh = subs_u8(vh, vs1); // veto some read gap opens
-        ve = subs_u8(ve, rdgape);
+        uint16_t vtmp = vh;
+        vh = subs_u16(vh, rdgapo);
+        vh = subs_u16(vh, vs1); // veto some read gap opens
+        ve = subs_u16(ve, rdgape);
         ve = max(ve, vh);
 
 	// Save E values
-        vh = pvHLoad[lane_id];
+        vh = (uint16_t)pvHLoad[lane_id];
 	pvHLoad+=ROWSTRIDE*LANES;
-        pvEStore[lane_id] = ve;
+        pvEStore[lane_id] = (uint16_t)ve;
 	pvEStore+=ROWSTRIDE*LANES;
 
 
 	// Update vf value
-        vtmp = subs_u8(vtmp, rfgapo);
-        vf = subs_u8(vf, rfgape);
+        vtmp = subs_u16(vtmp, rfgapo);
+        vf = subs_u16(vf, rfgape);
         vf = max(vf, vtmp);
     }
     return vf;
@@ -491,16 +491,16 @@ void EEU8_lazyF_HIP(
 
     assert(WARP_SIZE==32);
 
-    uint8_t vf = __shfl_up_sync(bitmask, vf0, 1, WARP_SIZE);
+    uint16_t vf = __shfl_up_sync(bitmask, vf0, 1, WARP_SIZE);
     if(lane_id==0) vf = 0;
 
     pvScore += WARP_SIZE;
 
-    uint8_t vs1 = pvScore[lane_id];
+    uint16_t vs1 = (uint16_t)pvScore[lane_id];
 
-    uint8_t vtmp = pvFStore[lane_id];
+    uint16_t vtmp = (uint16_t)pvFStore[lane_id];
 
-    vf = subs_u8(vf, vs1);
+    vf = subs_u16(vf, vs1);
 
     vf = max(vtmp, vf);
 
@@ -508,14 +508,14 @@ void EEU8_lazyF_HIP(
 
     unsigned long long mask = __ballot_sync(bitmask, anygt); // 32 predicate gets first lanes in thread
 
-    uint8_t vh = pvHStore[lane_id];
-    uint8_t ve = pvEStore[lane_id];
+    uint16_t vh = (uint16_t)pvHStore[lane_id];
+    uint16_t ve = (uint16_t)pvEStore[lane_id];
 
     uint16_t j = 0;
 
     while (mask)
     {
-        pvFStore[lane_id] = vf;
+        pvFStore[lane_id] = (uint8_t)vf;
 	pvFStore += ROWSTRIDE*WARP_SIZE;
 
         vh = max(vh, vf);
@@ -523,8 +523,8 @@ void EEU8_lazyF_HIP(
         pvHStore[lane_id] = vh;
 	pvHStore += ROWSTRIDE*WARP_SIZE;
 
-        uint8_t vh_gap = subs_u8(vh, rdgapo);
-        vh_gap = subs_u8(vh_gap, vs1);
+        uint16_t vh_gap = subs_u16(vh, rdgapo);
+        vh_gap = subs_u16(vh_gap, vs1);
 
         ve = max(ve, vh_gap);
 
@@ -546,11 +546,11 @@ void EEU8_lazyF_HIP(
 	    if(lane_id==0)vf=0;
         }
 
-        vs1 = pvScore[lane_id];
-        vtmp = pvFStore[lane_id];
+        vs1 = (uint16_t)pvScore[lane_id];
+        vtmp = (uint16_t)pvFStore[lane_id];
 
-        vf = subs_u8(vf, rfgape);
-        vf = subs_u8(vf, vs1);
+        vf = subs_u16(vf, rfgape);
+        vf = subs_u16(vf, vs1);
 
         vf = max(vtmp, vf);
 
@@ -559,8 +559,8 @@ void EEU8_lazyF_HIP(
         mask = __ballot_sync(bitmask, anygt);
         //mask = __ballot(anygt);
 
-        vh = pvHStore[lane_id];
-        ve = pvEStore[lane_id];
+        vh = (uint16_t)pvHStore[lane_id];
+        ve = (uint16_t)pvEStore[lane_id];
     }
 }
 
@@ -594,10 +594,10 @@ void EEU8_alignNucleotides_HIP(
 
 
     //Fills rdgapo values with readGapOpen
-    uint8_t rfgapo = refGapOpen;
-    uint8_t rfgape = readGapExtend;
-    uint8_t rdgapo = refGapOpen;
-    uint8_t rdgape = readGapExtend;
+    uint16_t rfgapo = refGapOpen;
+    uint16_t rfgape = readGapExtend;
+    uint16_t rdgapo = refGapOpen;
+    uint16_t rdgape = readGapExtend;
 
     // Initial values for the first column (H and E are 0)
     // pmat layout: [col][segment][lane]
@@ -640,7 +640,7 @@ void EEU8_alignNucleotides_HIP(
 	  const uint8_t* pvScore = profbuf + off; 
 
 	  // Does one lane at a time
-	  uint8_t vf = EEU8_alignOne_HIP(iter,
+	  uint16_t vf = EEU8_alignOne_HIP(iter,
 	      colstride,
 	      pvScore,
 	      pvHLoad, pvELoad,
