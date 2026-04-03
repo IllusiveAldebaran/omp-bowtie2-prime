@@ -44,8 +44,8 @@ CXX := amdclang++
 # CXX := hipcc
 
 # CPU-only
-#CXXFLAGS += -std=c++20 -DFORCE_ALL_OMP -mavx2 -faligned-new -DSSE_SCALAR
-CXXFLAGS += -std=c++20 -DFORCE_ALL_OMP -mavx2 -faligned-new -DSSE_AVX2
+CXXFLAGS += -std=c++20 -DFORCE_ALL_OMP -mavx2 -faligned-new -DSSE_SCALAR
+#CXXFLAGS += -std=c++20 -DFORCE_ALL_OMP -mavx2 -faligned-new -DSSE_AVX2
 
 #
 # GPU-enabled
@@ -53,8 +53,8 @@ CXXFLAGS += -std=c++20 -DFORCE_ALL_OMP -mavx2 -faligned-new -DSSE_AVX2
 
 # Enable HIP. Use CXX=amdclang++ or CXX=hipcc 
 # Warning with hybrid OPENMP Compilations
-#CXXFLAGS += -std=c++20 --offload-arch=native
-#CXXFLAGS += -x hip -DHIP_KERNELS -D__HIP_PLATFORM_AMD__
+CXXFLAGS += -std=c++20 --offload-arch=native -mavx2 -faligned-new -DSSE_AVX2
+CXXFLAGS += -x hip -DHIP_KERNELS -D__HIP_PLATFORM_AMD__ -DHIP_ENABLE_WARP_SYNC_BUILTINS
 
 #
 # NVIDIA HPC SDK flags options
