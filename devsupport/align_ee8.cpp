@@ -3,15 +3,18 @@
  */
 
 // assumed CDNA where warp size is 64. 32 on Nvidia and RDNA
-#ifndef WARP_SIZE
-#define WARP_SIZE 64
-#endif
-#ifndef E_PER_WARP
-#define E_PER_WARP 2
-#endif
-#ifndef LANE_SIZE
-#define LANE_SIZE 32 // number of lanes used in this
-#endif
+#ifndef SSE_SCALAR
+ #ifndef E_PER_WARP
+  #define E_PER_WARP 2
+ #endif
+ #ifndef LANE_SIZE
+  #define LANE_SIZE 32 // number of lanes used in this
+ #endif
+#else // enabled SSE_SCALAR
+ #define E_PER_WARP 1
+ #define LANE_SIZE 1
+ #define MAX_QUERY_SIZE 604 // empirical value at the moment
+#endif // SSE_SCALAR
 
 #define SWSSE_INLINE_ONLY
 
