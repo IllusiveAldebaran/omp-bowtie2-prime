@@ -878,6 +878,11 @@ inline EEU8_TCScore EEU8_alignNucleotidesScalar(const SSERegI profbuf[],
 					const TAlScore minsc, const size_t nrow,
 					DpBtCandidate btncand[], TIdxSize& btnfilled_,
 					const int8_t refGapOpen, const int8_t refGapExtend, const int8_t readGapOpen, const int8_t readGapExtend) {
+	// keep track of H, E and 
+	SSERegI pvH[MAX_QUERY_SIZE*2];
+	SSERegI pvE[MAX_QUERY_SIZE*2];
+	uint32_t pvOffset = MAX_QUERY_SIZE;
+
 	// Set all elts to reference gap open penalty
 	SSERegI rfgapo   = sse_setzero_siall();
 	SSERegI rfgape   = sse_setzero_siall();
@@ -904,24 +909,10 @@ inline EEU8_TCScore EEU8_alignNucleotidesScalar(const SSERegI profbuf[],
 	assert_eq(ROWSTRIDE, colstride / iter);
 
 	// Initialize the H and E vectors in the first matrix column
-	{
-	  SSERegI *pvHTmp = pmat + SSEMatrixConsts::TMP;
-	  SSERegI *pvETmp = pmat + SSEMatrixConsts::E;
-	  SSERegI vlo      = sse_setzero_siall();
-	
-	  for(size_t i = 0; i < iter; i++) {
-		sse_store_siall(pvETmp, vlo);
-		sse_store_siall(pvHTmp, vlo); // start high in end-to-end mode
-		pvETmp += ROWSTRIDE;
-		pvHTmp += ROWSTRIDE;
-	  }
+	for(size_t i = 0; i < iter; i++) {
+	      pvE[i] = 0;
+	      pvH[i] = 0;
 	}
-
-	// These are swapped just before the innermost loop
-	SSERegI *pvHLoad  = pmat + SSEMatrixConsts::TMP;
-	SSERegI *pvHStore = pmat + SSEMatrixConsts::H;
-	SSERegI *pvELoad  = pmat + SSEMatrixConsts::E;
-	SSERegI *pvEStore = pmat + colstride + SSEMatrixConsts::E;
 	
 	// Maximum score in final row
 	EEU8_TCScore lrmax = MIN_U8;
@@ -965,21 +956,12 @@ inline EEU8_TCScore EEU8_alignNucleotidesScalar(const SSERegI profbuf[],
 		  // Fill topmost (least sig) cell with high value
 		  vh = sse_or_siall(vh, vhilsw);
 
-		  SSERegI* pvScoreTmp  = (SSERegI*)pvScore;
-		  SSERegI* pvELoadTmp  = pvELoad;
-		  SSERegI* pvHLoadTmp  = pvHLoad;
-		  SSERegI* pvHStoreTmp = pvHStore;
-		  SSERegI* pvEStoreTmp = pvEStore;
-
 		  // For each character in the reference text:
 		  for(TIdxSize j = 0; j < iter; j++) {
-		  	SSERegI vs0 = sse_load_siall(pvScoreTmp);
-                          pvScoreTmp++;
-		  	SSERegI vs1 = sse_load_siall(pvScoreTmp);
-                          pvScoreTmp++;
+		  	SSERegI vs0 = sse_load_siall(&pvScore[j*2]);
+		  	SSERegI vs1 = sse_load_siall(&pvScore[j*2+1]);
 		  	// Load cells from E, calculated previously
-		  	SSERegI ve = sse_load_siall(pvELoadTmp);
-		  	pvELoadTmp += ROWSTRIDE;
+		  	SSERegI ve = sse_load_siall(&pvE[(i%2)*pvOffset+j]);
 
 			// Store cells in F, calculated previously
 			vf = sse_subs_epu8(vf, vs1); // veto some ref gap extensions
@@ -992,8 +974,7 @@ inline EEU8_TCScore EEU8_alignNucleotidesScalar(const SSERegI profbuf[],
 		  	vh = sse_max_epu8(vh, vf);
 		  	
 		  	// Save the new vH values
-		  	sse_store_siall(pvHStoreTmp, vh);
-		  	pvHStoreTmp += ROWSTRIDE;
+		  	sse_store_siall(&pvHStore[j*ROWSTRIDE], vh);
 		  	
 		  	// Update vE value
 		  	SSERegI vtmp = vh;
@@ -1003,12 +984,10 @@ inline EEU8_TCScore EEU8_alignNucleotidesScalar(const SSERegI profbuf[],
 		  	ve = sse_max_epu8(ve, vh);
 
 		  	// Load the next h value
-		  	vh = sse_load_siall(pvHLoadTmp);
-		  	pvHLoadTmp += ROWSTRIDE;
+		  	vh = sse_load_siall(&pvHLoad[j*ROWSTRIDE]);
 		  	
 		  	// Save E values
-		  	sse_store_siall(pvEStoreTmp, ve);
-		  	pvEStoreTmp += ROWSTRIDE;
+		  	sse_store_siall(&pvE[((i+1)%2)*pvOffset + j], ve);
 		  	
 		  	// Update vf value
 		  	vtmp = sse_subs_epu8(vtmp, rfgapo);
@@ -1017,12 +996,9 @@ inline EEU8_TCScore EEU8_alignNucleotidesScalar(const SSERegI profbuf[],
 		  }
 		}
 
-		// else, no need for lazyF
-		SSERegI* pTmp = pvHLoad; // for swapping pointers
-		pvHLoad = pvHStore;    // new pvHLoad = pvHStore
 		
 		// Note: we may not want to extract from the final row
-		EEU8_TCScore lr = ((EEU8_TCScore*)(pvHLoad))[lastWordIdx];
+		EEU8_TCScore lr = ((EEU8_TCScore*)(pvHStore))[lastWordIdx];
 		TAlScore sc = (TAlScore)(lr - 0xff);
 		if(lr > lrmax) {
 			lrmax = lr;
@@ -1033,10 +1009,11 @@ inline EEU8_TCScore EEU8_alignNucleotidesScalar(const SSERegI profbuf[],
 			btnfilled++;
 		}
 
-		// Adjust the load and store vectors here.  
-		pvHStore = pvHStore + colstride;
-		pvELoad  = pvELoad  + colstride;
-		pvEStore = pvEStore + colstride;
+		// Swap Pointer Columns
+		// else, no need for lazyF
+		SSERegI* pTmp = pvHLoad;
+		pvHLoad = pvHStore;
+		pvHStore = pTmp;
 	}
 
 

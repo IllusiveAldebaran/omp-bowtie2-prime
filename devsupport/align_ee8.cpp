@@ -24,6 +24,8 @@
 #define MAX_RF_EL   192*(32/NBYTES_PER_REG)
 #define MAX_MAT_EL  4096*(32/NBYTES_PER_REG)
 
+#define tread(data,size,n, file) if (fread(data,size,n,file)!=n) {fprintf(stderr, "Read failed\n"); return 3;}
+
 int load_data(int nels,
 		size_t nrow[],
 		size_t iter[],
@@ -201,7 +203,7 @@ int align_ee8_batchLaunch(const int npar, const int nels,
       int nerrs = 0;
 
       // Handle all the proper indexing in this call.
-      EEU8_alignNucleotidesBatch_HIP<<<npar, lanes>>>(npar, nels,
+   EEU8_alignNucleotidesBatch_HIP<<<npar, lanes>>>(npar, nels,
 	    nrow_, iter_, colstride_, lastWordIdx_, minsc_, rfd_,
 	    profbuf_, rf_, gaps_,
 	    mat_, btncand_,
@@ -254,15 +256,10 @@ int align_ee8_one(const int el, // for debuggging purpose
 #endif
 	int nerrs = 0;
 	if (int(ref_lrmax) != int(lrmax)) nerrs++;
-<<<<<<< HEAD
 	if (int(ref_btnfilled) != int(btnfilled)) nerrs++;
 #ifndef NO_CHECK_PRINT
 	if (int(ref_lrmax) != int(lrmax)) fprintf(stderr, "[%i] MISMATCH in lrmax (%i != %i)\n",el,int(lrmax), int(ref_lrmax));
 	if (int(ref_btnfilled) != int(btnfilled)) fprintf(stderr, "[%i] MISMATCH in ref_btnfilled (%i != %i)\n",el,int(btnfilled), int(ref_btnfilled));
-=======
-#ifndef NO_CHECK_PRINT
-	if (int(ref_lrmax) != int(lrmax)) fprintf(stderr, "[%i] MISMATCH in lrmax (%i != %i)\n",el,int(lrmax), int(ref_lrmax));
->>>>>>> 02dc1ec (Align nucleotide hip (#16))
 #endif
 	return nerrs;
 }
