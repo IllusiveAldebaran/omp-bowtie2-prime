@@ -537,7 +537,8 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 	private:
 		uint8_t val;
 		// Decode 2-bit field: 0->0x00, 1->0x01, 2->0xff
-		static constexpr uint8_t decode2(uint8_t bits) { return (bits <= 1) ? bits : 0xff; }
+		// -(bits>>1): 0->0, 1->0, 2->0xff (uint8_t wrap)
+		static constexpr uint8_t decode2(uint8_t bits) { return (bits & 1) | uint8_t(-(bits >> 1)); }
 	public:
 		constexpr TPackedScore() : val(0) {};
 		constexpr TPackedScore(const uint8_t packed_val) : val(packed_val) {};
@@ -558,7 +559,8 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 	private:
 		uint8_t val;
 		// Decode 2-bit field: 0->0x00, 1->0x01, 2->0xff
-		static constexpr uint8_t decode2(uint8_t bits) { return (bits <= 1) ? bits : 0xff; }
+		// -(bits>>1): 0->0, 1->0, 2->0xff (uint8_t wrap)
+		static constexpr uint8_t decode2(uint8_t bits) { return (bits & 1) | uint8_t(-(bits >> 1)); }
 	public:
 		constexpr TPackedScoreHalf() : val(0) {};
 		constexpr TPackedScoreHalf(const uint8_t packed_val) : val(packed_val) {};
