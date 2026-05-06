@@ -537,7 +537,8 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 	private:
 		uint16_t val;
 		// Decode nibble: 0x0->0x00, 0x1->0x01, 0xf->0xff
-		static constexpr uint8_t decode4(uint8_t nibble) { return (nibble <= 1) ? nibble : 0xff; }
+		// (nibble&1): pass bit0; -(nibble>>3): 0xff if bit3 set (0xf), 0 otherwise
+		static constexpr uint8_t decode4(uint8_t nibble) { return (nibble & 1) | uint8_t(-(nibble >> 3)); }
 	public:
 		constexpr TPackedScore() : val(0) {};
 		constexpr TPackedScore(const uint16_t packed_val) : val(packed_val) {};
@@ -558,7 +559,8 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 	private:
 		uint8_t val;
 		// Decode nibble: 0x0->0x00, 0x1->0x01, 0xf->0xff
-		static constexpr uint8_t decode4(uint8_t nibble) { return (nibble <= 1) ? nibble : 0xff; }
+		// (nibble&1): pass bit0; -(nibble>>3): 0xff if bit3 set (0xf), 0 otherwise
+		static constexpr uint8_t decode4(uint8_t nibble) { return (nibble & 1) | uint8_t(-(nibble >> 3)); }
 	public:
 		constexpr TPackedScoreHalf() : val(0) {};
 		constexpr TPackedScoreHalf(const uint8_t packed_val) : val(packed_val) {};
@@ -595,7 +597,7 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 	// Load the procbuf into local memory, compacting {0x00,0x01,0xff} -> {0x0,0x1,0xf} nibbles.
 	// Each entry covers two consecutive j steps (even+odd): low byte=even, high byte=odd.
 	// Last entry (when iter is odd) uses only the low byte.
-	auto encode4 = [](uint8_t v) -> uint8_t { return (v <= 1) ? v : 0xf; };
+	auto encode4 = [](uint8_t v) -> uint8_t { return v & 0xf; };
 	auto pack_byte = [&](const uint8_t *p) -> uint8_t {
 		return encode4(p[0]) | (encode4(p[1]) << 4);
 	};
