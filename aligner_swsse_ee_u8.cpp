@@ -497,17 +497,15 @@ inline EEU8_TCScore EEU8_alignNucleotides(const SSERegI profbuf[],
 /**
  * Like the previous alignNucleotides, but the Scalar version allows to forfeit some extra strutures.
  * Note that this version does not return the E, F, H vectors.
- * Only lrmax is computed and returned.
- *
- * If the vectors are needed, e.g. when (lrmax - 0xff)>=minsc, i.e. btnfilled>0, use the regular, full version.
+ * If those are needed, e.g. when (lrmax - 0xff)>=minsc, i.e. btnfilled>0, use the regular, full version.
  *
  * Select intput parameters:
  *   profbuf - buffer for query profile & temp vecs
  *   rf      - reference sequence
  *
  */
-template<typename TIdxSize=uint16_t, uint16_t MAX_ITER=151>
-inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
+template<typename TIdxSize=uint16_t, uint16_t MAX_ITER=151, uint16_t MAX_RB=5>
+inline EEU8_TCScore EEU8_alignNucleotidesScalar(const uint8_t profbuf[],
 					const char   rf[], const TIdxSize rfd,
 					const size_t nrow,
 					const int8_t refGapOpen, const int8_t refGapExtend, const int8_t readGapOpen, const int8_t readGapExtend) {
@@ -535,34 +533,41 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 
         class TPackedScore {
 	private:
-		uint32_t val;
+		uint8_t val;
+		// Decode nibble: 0x0->0x00, 0x1->0x01, 0xf->0xff
+		static constexpr uint8_t decode4(uint8_t nibble) { return (nibble <= 1) ? nibble : 0xff; }
 	public:
 		constexpr TPackedScore() : val(0) {};
-		// Note: j must be even
-		constexpr TPackedScore(const uint8_t *pvScore, const uint16_t j) { val = ((uint32_t *)(pvScore+(2*j)))[0]; }
+		constexpr TPackedScore(const uint8_t packed_val) : val(packed_val) {};
 
 		constexpr TPackedScore(const TPackedScore& other) : val(other.val) {}
 		constexpr TPackedScore& operator=(const TPackedScore& other) { val = other.val; return *this;}
 
-		constexpr uint8_t get_vs0_even() const {return uint8_t(val); }
-		constexpr uint8_t get_vs1_even() const {return uint8_t(val>>8); }
-		constexpr uint8_t get_vs0_odd() const {return uint8_t(val>>16); }
-		constexpr uint8_t get_vs1_odd() const {return uint8_t(val>>24); }
+		// low nibble=vs0, high nibble=vs1 (even step only; odd step packed in separate byte)
+		constexpr uint8_t get_vs0_even() const { return decode4(val & 0xf); }
+		constexpr uint8_t get_vs1_even() const { return decode4(val >> 4); }
+
+		constexpr uint8_t operator()() const {return val;}
 	};
 
-        class TPackedScoreHalf {
+        class TPackedScoreFull {
 	private:
 		uint16_t val;
+		static constexpr uint8_t decode4(uint8_t nibble) { return (nibble <= 1) ? nibble : 0xff; }
 	public:
-		constexpr TPackedScoreHalf() : val(0) {};
-		// Note: j must be even
-		constexpr TPackedScoreHalf(const uint8_t *pvScore, const uint16_t j) { val = ((uint16_t *)(pvScore+(2*j)))[0]; }
+		constexpr TPackedScoreFull() : val(0) {};
+		constexpr TPackedScoreFull(const uint16_t packed_val) : val(packed_val) {};
 
-		constexpr TPackedScoreHalf(const TPackedScoreHalf& other) : val(other.val) {}
-		constexpr TPackedScoreHalf& operator=(const TPackedScoreHalf& other) { val = other.val; return *this;}
+		constexpr TPackedScoreFull(const TPackedScoreFull& other) : val(other.val) {}
+		constexpr TPackedScoreFull& operator=(const TPackedScoreFull& other) { val = other.val; return *this;}
 
-		constexpr uint8_t get_vs0_even() const {return uint8_t(val); }
-		constexpr uint8_t get_vs1_even() const {return uint8_t(val>>8); }
+		// low byte: even step; high byte: odd step; within each byte: low nibble=vs0, high nibble=vs1
+		constexpr uint8_t get_vs0_even() const { return decode4(uint8_t(val) & 0xf); }
+		constexpr uint8_t get_vs1_even() const { return decode4(uint8_t(val) >> 4); }
+		constexpr uint8_t get_vs0_odd()  const { return decode4(uint8_t(val >> 8) & 0xf); }
+		constexpr uint8_t get_vs1_odd()  const { return decode4(uint8_t(val >> 8) >> 4); }
+
+		constexpr uint16_t operator()() const {return val;}
 	};
 
         constexpr uint16_t iter = MAX_ITER;
@@ -584,6 +589,32 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 	assert_leq(readGapExtend, readGapOpen);
 	uint8_t rdgape = uint8_t(readGapExtend);
 
+	// Load the procbuf into local memory, compacting {0x00,0x01,0xff} -> {0x0,0x1,0xf} nibbles.
+	// Each entry covers two consecutive j steps (even+odd): low byte=even, high byte=odd.
+	// Last entry (when iter is odd) uses only the low byte.
+	auto encode4 = [](uint8_t v) -> uint8_t { return (v <= 1) ? v : 0xf; };
+	auto pack_byte = [&](const uint8_t *p) -> uint8_t {
+		return encode4(p[0]) | (encode4(p[1]) << 4);
+	};
+	uint16_t loc_procbuf[MAX_RB][(MAX_ITER+1)/2];
+	for (int ir=0; ir<MAX_RB; ir++) {
+		size_t off = (size_t)( ir ) * iter * 2;
+		const uint8_t *pvScore = profbuf + off;
+		for(TIdxSize j = 0; j < ((iter-1)/2); j++) {
+			// Each j step occupies 2 bytes (vs0, vs1); even=j*2, odd=(j*2+2)
+			uint8_t even_byte = pack_byte(pvScore + j*4);      // vs0_even, vs1_even
+			uint8_t odd_byte  = pack_byte(pvScore + j*4 + 2);  // vs0_odd,  vs1_odd
+			loc_procbuf[ir][j] = uint16_t(even_byte) | (uint16_t(odd_byte) << 8);
+		}
+		if constexpr((iter%2)!=0) {
+			// Last Even step: only one j step remaining
+			uint8_t even_byte = pack_byte(pvScore + ((iter-1)/2)*4);
+			loc_procbuf[ir][(iter-1)/2] = uint16_t(even_byte);
+		}
+	}
+
+	//
+	//
 	// Maximum score in final row
 	EEU8_TCScore lrmax = MIN_U8;
 
@@ -607,9 +638,7 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 		
 		// Fetch the appropriate query profile.  Note that elements of rf must
 		// be numbers, not masks.
-		size_t off = (size_t)std::countr_zero( uint8_t(rf[i]) ) * iter * 2;
-		// points into the query profile
-		const uint8_t *pvScore = profbuf + off; // even elts = query profile, odd = gap barrier
+		const size_t ir = (size_t)std::countr_zero( uint8_t(rf[i]) );
 	
 		// scalar version of EEU8_alignOne()
 		{
@@ -628,11 +657,11 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 		  // Only downsides for the CPUs, that have fewer registers
 #pragma omp unroll full
 #endif
-		  for(TIdxSize j2 = 0; j2 < (iter-1); j2+=2) {
+		  for(TIdxSize j = 0; j < ((iter-1)/2); j++) {
 		    // Load cells from E and H, calculated previously
-		    TPackedEH full_eh(bufEH[j2/2]);
+		    TPackedEH full_eh(bufEH[j]);
 		    // Load the scores
-		    const TPackedScore full_score(pvScore,j2);
+		    const TPackedScoreFull full_score(loc_procbuf[ir][j]);
 		    // Even step
 		    {
 		  	// Load cells from E and H, calculated previously
@@ -702,14 +731,14 @@ inline EEU8_TCScore EEU8_alignNucleotidesLRScalar(const uint8_t profbuf[],
 			vh = vh_next;
 		    }
 		    // save the packed result back for the next i loop
-		    bufEH[j2/2] = full_eh;
+		    bufEH[j] = full_eh;
 		  }
 		  if constexpr((iter%2)!=0) {
 			// Last Even step
 		  	// Load cells from E and H, calculated previously
 			const TPackedEH full_eh(bufEH[iter/2]);
-		        // Load the scores
-		        const TPackedScoreHalf full_score(pvScore, iter-1);
+		        // Load the scores (only low byte used; odd nibbles are zero)
+		        const TPackedScore full_score{uint8_t(loc_procbuf[ir][(iter-1)/2])};
 
 			uint8_t ve = full_eh.get_E_even();
 			// no next round, do not need vh_next
@@ -831,24 +860,13 @@ bool SwAligner::alignEnd2EndSseU8(
 	uint16_t btnfilled = 0;
 	btncand_.resizeNoCopy(rflen_); // cannot be bigger that this
 
-#if 0
-	// When PRE_LR_SCALAR
-	// TODO: Consider the use of EEU8_alignNucleotidesLRScalar
-	EEU8_TCScore lrmax = 255;
-	if ((iter!=151) {
-	        lrmax= EEU8_alignNucleotidesLRScalar<uint16_t,151>(d.profbuf_.ptr(), rf_, rflen_,
-					dpRows(),
-					sc_->refGapOpen(), sc_->refGapExtend(), sc_->readGapOpen(), sc_->readGapExtend());
-	}
-	TAlScore sc = (TAlScore)(lrmax - 0xff);
-        if (sc>=minsc_)) {
-		lrmax = EEU8_alignNucleotides<uint16_t>(d.profbuf_.ptr(), rf_, rflen_,
+#ifdef PRE_LR_SCALAR
+	const EEU8_TCScore lrmax = EEU8_alignNucleotidesScalar<uint16_t>(d.profbuf_.ptr(), rf_, rflen_,
 					d.mat_.ptr(),
                                         iter, d.mat_.colstride(), lastWordIdx,
 					minsc_, dpRows(),
 					btncand_.ptr(), btnfilled,
 					sc_->refGapOpen(), sc_->refGapExtend(), sc_->readGapOpen(), sc_->readGapExtend());
-	}
 #else
 	const EEU8_TCScore lrmax = EEU8_alignNucleotides<uint16_t>(d.profbuf_.ptr(), rf_, rflen_,
 					d.mat_.ptr(),
