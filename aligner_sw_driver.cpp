@@ -600,6 +600,8 @@ int SwDriver::extendSeedsCollect(
 			cand.refcoord = refcoord;
 #if defined(PRE_LR_SCALAR) && defined(SSE_SCALAR)
 			cand.lrm11_passed = false;
+			cand.flat_rf    = nullptr;
+			cand.flat_rflen = 0;
 			// Write profbuf/rf/gaps/nrow directly into pre-allocated flat arrays.
 			if(cands.size() < ALN_MAX_ITER) {
 				const size_t flat_idx = cand_offset + cands.size();
@@ -613,11 +615,12 @@ int SwDriver::extendSeedsCollect(
 					nwindow, nsInLeftShift);
 				if(ok) {
 					uint16_t rflen = 0, nrow = 0;
-					swa.fillCandRf(
-						flat_rf + flat_idx * rf_stride,
-						rflen, nrow);
+					char* rf_slot = flat_rf + flat_idx * rf_stride;
+					swa.fillCandRf(rf_slot, rflen, nrow);
 					flat_rflen[flat_idx] = rflen;
 					flat_nrow [flat_idx] = nrow;
+					cand.flat_rf    = rf_slot;
+					cand.flat_rflen = rflen;
 				} else {
 					flat_rflen[flat_idx] = 0;
 					flat_nrow [flat_idx] = 0;
@@ -662,12 +665,27 @@ int SwDriver::extendSeedsAlign(
 		if(!cand.lrm11_passed) continue;
 #endif
 
-		size_t nsInLeftShift = 0;
-		if(!swa.initRef(
-			cand.fw, cand.tidx, cand.rect, ref,
-			cand.tlen, minsc, enable8,
-			true,  // seed extension (not mate finding)
-			cand.nwindow, nsInLeftShift))
+		bool initOk;
+#if defined(PRE_LR_SCALAR) && defined(SSE_SCALAR)
+		if(cand.flat_rf != nullptr) {
+			// Reuse the reference window decoded during extendSeedsCollect
+			// avoids a second BitPairReference decode for every passing candidate.
+			initOk = swa.initRef(
+				cand.fw, cand.tidx, cand.rect,
+				cand.flat_rf, (size_t)cand.flat_rflen, (TRefOff)cand.tlen,
+				minsc, enable8, true);
+		} else {
+#endif
+			size_t nsInLeftShift = 0;
+			initOk = swa.initRef(
+				cand.fw, cand.tidx, cand.rect, ref,
+				cand.tlen, minsc, enable8,
+				true,  // seed extension (not mate finding)
+				cand.nwindow, nsInLeftShift);
+#if defined(PRE_LR_SCALAR) && defined(SSE_SCALAR)
+		}
+#endif
+		if(!initOk)
 		{
 			prm.nExDpFails++;
 			prm.nDpFail++;

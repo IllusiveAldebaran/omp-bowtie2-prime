@@ -230,6 +230,10 @@ struct ExtendCandidate {
 	size_t         nwindow;   // left-shift of seed within rect
 	Coord          refcoord;  // seed coordinate (for seenDiags bookkeeping)
 	bool           lrm11_passed; // passed LRM11Scalar pre-filter; set by runLRM11Filter
+#if defined(PRE_LR_SCALAR) && defined(SSE_SCALAR)
+	char*          flat_rf;    // pre-decoded reference window (into flat_rf array)
+	uint16_t       flat_rflen; // length of pre-decoded reference window
+#endif
 };
 
 class SwDriver {

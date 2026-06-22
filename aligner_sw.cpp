@@ -231,11 +231,30 @@ bool SwAligner::initRef(
 void SwAligner::fillCandProfbuf(bool fw, uint8_t* out_profbuf, int8_t out_gaps[4])
 {
 	assert(initedRead());
-	buildQueryProfileEnd2EndSseU8(fw);
-	const auto& d = fw ? sseU8fw_ : sseU8rc_;
-	const size_t nrow = dpRows();
-	const size_t nbytes = ALPHA_SIZE * nrow * 2;
-	memcpy(out_profbuf, reinterpret_cast<const uint8_t*>(d.profbuf_.ptr()), nbytes);
+	const BTDnaString* rd = fw ? rdfw_ : rdrc_;
+	const BTString*    qu = fw ? qufw_ : qurc_;
+	const size_t len = rd->length();
+	// Build scalar profbuf layout (NBYTES_PER_REG=1, seglen=len) so that
+	// EEU8_alignNucleotidesLRM11Scalar can index it as profbuf[refc * len * 2 + j * 2].
+	// This is independent of SSE_AVX2 / SSE_SCALAR — the full DP profbuf layout
+	// (in d.profbuf_) uses the compiled NBYTES_PER_REG and is not used here.
+	for(size_t refc = 0; refc < ALPHA_SIZE; refc++) {
+		uint8_t* qprofWords = out_profbuf + refc * len * 2;
+		uint8_t* gbarWords  = qprofWords + 1;
+		for(size_t j = 0; j < len; j++) {
+			int readc = (*rd)[j];
+			int readq = (*qu)[j];
+			int sc = -sc_->score(readc, (int)(1 << refc), readq - 33);
+			assert_range(0, 255, sc);
+			size_t j_from_end = len - j - 1;
+			uint8_t gbar = (j < (size_t)sc_->gapbar || j_from_end < (size_t)sc_->gapbar)
+			               ? 0xff : 0;
+			*qprofWords = (uint8_t)sc;
+			*gbarWords  = gbar;
+			qprofWords += 2;
+			gbarWords  += 2;
+		}
+	}
 	out_gaps[0] = (int8_t)sc_->refGapOpen();
 	out_gaps[1] = (int8_t)sc_->refGapExtend();
 	out_gaps[2] = (int8_t)sc_->readGapOpen();

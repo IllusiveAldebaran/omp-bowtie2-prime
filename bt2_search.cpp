@@ -2884,7 +2884,7 @@ static void multiseedSearchWorker() {
 				} // if mate active
 			   } // for ib
 			} // for nb
-		   tmr.next("extend_bwtwalk");
+		   tmr.next("extendSeeds_bwtwalk");
 
 		   // always call ensure_spare from main CPU thread
 #ifdef USE_CUSTOM_ALLOCS
@@ -2930,7 +2930,7 @@ static void multiseedSearchWorker() {
 					}
 				}
 			}
-		   tmr.next("calculate_candidates");
+		   tmr.next("extendSeeds_calcCandidates");
 		   // always call ensure_spare from main CPU thread
 #ifdef USE_CUSTOM_ALLOCS
 		   mate_allocs.ensure_spare();
@@ -2991,7 +2991,7 @@ static void multiseedSearchWorker() {
 				} // if mate active
 			   } // for ib
 			} // for nb
-		   tmr.next("extend_dp_backtrace");
+		    tmr.next("extendSeeds_dp+backtrace");
 
 		   // always call ensure_spare from main CPU thread
 #ifdef USE_CUSTOM_ALLOCS
