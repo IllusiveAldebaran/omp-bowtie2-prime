@@ -43,6 +43,8 @@
  */
 
 #include <iostream>
+#include <atomic>
+#include <chrono>
 #include "aligner_cache.h"
 #include "aligner_sw_driver.h"
 #include "pe.h"
@@ -53,6 +55,20 @@
 // -- --
 
 using namespace std;
+
+static std::atomic<uint64_t> g_ns_initRef{0};
+static std::atomic<uint64_t> g_ns_align{0};
+static std::atomic<uint64_t> g_ns_backtrace{0};
+static std::atomic<uint64_t> g_n_align{0};
+static std::atomic<uint64_t> g_n_backtrace{0};
+
+__attribute__((destructor))
+static void print_extend_timers() {
+	fprintf(stderr, "PROFILE initRef     %.3f s  align %.3f s (%lu calls)  backtrace %.3f s (%lu calls)\n",
+		g_ns_initRef.load()   * 1e-9,
+		g_ns_align.load()     * 1e-9, (unsigned long)g_n_align.load(),
+		g_ns_backtrace.load() * 1e-9, (unsigned long)g_n_backtrace.load());
+}
 
 /**
  * Given seed results, set up all of our state for resolving and keeping
@@ -666,10 +682,10 @@ int SwDriver::extendSeedsAlign(
 #endif
 
 		bool initOk;
+		{
+			auto _t0 = std::chrono::high_resolution_clock::now();
 #if defined(PRE_LR_SCALAR) && defined(SSE_SCALAR)
 		if(cand.flat_rf != nullptr) {
-			// Reuse the reference window decoded during extendSeedsCollect
-			// avoids a second BitPairReference decode for every passing candidate.
 			initOk = swa.initRef(
 				cand.fw, cand.tidx, cand.rect,
 				cand.flat_rf, (size_t)cand.flat_rflen, (TRefOff)cand.tlen,
@@ -685,6 +701,9 @@ int SwDriver::extendSeedsAlign(
 #if defined(PRE_LR_SCALAR) && defined(SSE_SCALAR)
 		}
 #endif
+			g_ns_initRef += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+				std::chrono::high_resolution_clock::now() - _t0).count();
+		}
 		if(!initOk)
 		{
 			prm.nExDpFails++;
@@ -697,7 +716,14 @@ int SwDriver::extendSeedsAlign(
 		seenDiags1_.add(refival);
 
 		TAlScore bestCell = std::numeric_limits<TAlScore>::min();
-		bool found = swa.align(bestCell);
+		bool found;
+		{
+			auto _t0 = std::chrono::high_resolution_clock::now();
+			found = swa.align(bestCell);
+			g_ns_align += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+				std::chrono::high_resolution_clock::now() - _t0).count();
+			g_n_align++;
+		}
 		prm.nExDps++;
 		if(!found) {
 			prm.nExDpFails++;
@@ -717,7 +743,13 @@ int SwDriver::extendSeedsAlign(
 			resGap_.reset();
 			assert(resGap_.empty());
 			if(swa.done()) break;
-			swa.nextAlignment(resGap_, minsc);
+			{
+				auto _t0 = std::chrono::high_resolution_clock::now();
+				swa.nextAlignment(resGap_, minsc);
+				g_ns_backtrace += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::high_resolution_clock::now() - _t0).count();
+				g_n_backtrace++;
+			}
 			found = !resGap_.empty();
 			if(!found) break;
 

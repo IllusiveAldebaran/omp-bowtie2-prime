@@ -2920,13 +2920,29 @@ static void multiseedSearchWorker() {
 						flat_mate, flat_passed);
 
 					// Scatter results back to per-mate candidate lists.
+					uint32_t dbg_passed = 0, dbg_total = 0, dbg_not151 = 0;
 					for(uint32_t mate = 0; mate < total_mates; mate++) {
 						if(mate_idx[mate] < 0) continue;
 						msWorkerObjs& msobj = g_msobjs[mate];
 						const size_t off = mate_cand_offset[mate];
 						for(size_t ci = 0; ci < msobj.extend_cands.size(); ci++) {
 							msobj.extend_cands[ci].lrm11_passed = flat_passed[off + ci];
+							dbg_total++;
+							if(flat_passed[off + ci]) dbg_passed++;
+							if(flat_nrow[off + ci] != 151) dbg_not151++;
 						}
+					}
+					static std::atomic<uint32_t> g_dbg_passed{0}, g_dbg_total{0}, g_dbg_not151{0};
+					g_dbg_passed  += dbg_passed;
+					g_dbg_total   += dbg_total;
+					g_dbg_not151  += dbg_not151;
+					static bool g_dbg_printed = false;
+					if(!g_dbg_printed && g_dbg_total.load() > 500000) {
+						g_dbg_printed = true;
+						fprintf(stderr, "DBG filter: %u / %u passed (%.1f%%), %u non-151-row (auto-passed)\n",
+							g_dbg_passed.load(), g_dbg_total.load(),
+							100.0f * g_dbg_passed.load() / g_dbg_total.load(),
+							g_dbg_not151.load());
 					}
 				}
 			}
